@@ -1,0 +1,4 @@
+node_modules/
+cheapdata.db
+*.db
+.env
