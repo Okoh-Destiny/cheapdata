@@ -1,74 +1,110 @@
 const express = require("express");
+const session = require("express-session");
 const Database = require("better-sqlite3");
-const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const path = require("path");
 require("dotenv").config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// =========================
-// DATABASE
-// =========================
+/* =====================================================
+   MIDDLEWARE
+===================================================== */
 
-const db = new Database("cheapdata.db");
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-db.pragma("foreign_keys = ON");
+app.use(
+    session({
+        secret:
+            process.env.SESSION_SECRET ||
+            "cheapdata-development-secret-change-this",
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            httpOnly: true,
+            secure: false,
+            sameSite: "lax",
+            maxAge: 24 * 60 * 60 * 1000
+        }
+    })
+);
 
-// =========================
-// CREATE TABLES
-// =========================
+app.use(express.static(path.join(__dirname, "public")));
 
-db.prepare(`
+/* =====================================================
+   DATABASE
+===================================================== */
+
+const db = new Database(
+    path.join(__dirname, "cheapdata.db")
+);
+
+db.pragma("journal_mode = WAL");
+
+/* =====================================================
+   CREATE TABLES
+===================================================== */
+
+db.exec(`
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
-        phone TEXT NOT NULL UNIQUE,
+        phone TEXT NOT NULL,
         password TEXT NOT NULL,
-        purchase_pin TEXT,
         balance REAL NOT NULL DEFAULT 0,
-        virtual_account_number TEXT,
-        virtual_bank_name TEXT,
-        kyc_status TEXT NOT NULL DEFAULT 'pending',
-        is_admin INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-`).run();
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 
-db.prepare(`
     CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         type TEXT NOT NULL,
         amount REAL NOT NULL,
-        status TEXT NOT NULL,
-        reference TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reference TEXT NOT NULL UNIQUE,
         description TEXT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-`).run();
+    );
 
-// =========================
-// DATABASE MIGRATIONS
-// =========================
+    CREATE TABLE IF NOT EXISTS data_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        network TEXT NOT NULL,
+        plan_name TEXT NOT NULL,
+        data_size TEXT NOT NULL,
+        provider_cost REAL NOT NULL DEFAULT 0,
+        selling_price REAL NOT NULL,
+        status INTEGER NOT NULL DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(network, plan_name)
+    );
+`);
 
-function addColumnIfMissing(table, column, definition) {
-    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+/* =====================================================
+   ADD MISSING USER COLUMNS
+===================================================== */
+
+function addColumnIfMissing(
+    table,
+    column,
+    definition
+) {
+    const columns = db
+        .prepare(`PRAGMA table_info(${table})`)
+        .all();
 
     const exists = columns.some(
-        existingColumn => existingColumn.name === column
+        (item) => item.name === column
     );
 
     if (!exists) {
-        db.prepare(`
-            ALTER TABLE ${table}
-            ADD COLUMN ${column} ${definition}
-        `).run();
-
-        console.log(`Added missing column: ${table}.${column}`);
+        db.exec(
+            `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`
+        );
     }
 }
 
@@ -93,7 +129,7 @@ addColumnIfMissing(
 addColumnIfMissing(
     "users",
     "kyc_status",
-    "TEXT NOT NULL DEFAULT 'pending'"
+    "TEXT DEFAULT 'not_verified'"
 );
 
 addColumnIfMissing(
@@ -102,56 +138,217 @@ addColumnIfMissing(
     "INTEGER NOT NULL DEFAULT 0"
 );
 
-// =========================
-// MIDDLEWARE
-// =========================
+addColumnIfMissing(
+    "users",
+    "reset_token_hash",
+    "TEXT"
+);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+addColumnIfMissing(
+    "users",
+    "reset_token_expires_at",
+    "DATETIME"
+);
 
-app.use(express.static(path.join(__dirname, "public")));
+/* =====================================================
+   DEFAULT DATA PLANS
+===================================================== */
 
-// =========================
-// HELPER FUNCTIONS
-// =========================
+const defaultPlans = [
+    ["MTN", "1GB", "1GB", 230, 250],
+    ["MTN", "2GB", "2GB", 460, 500],
+    ["MTN", "3GB", "3GB", 690, 750],
+    ["MTN", "5GB", "5GB", 1150, 1250],
+    ["MTN", "10GB", "10GB", 2300, 2500],
+    ["MTN", "20GB", "20GB", 4600, 5000],
+    ["MTN", "40GB", "40GB", 9200, 10000],
 
-function generateReference(prefix) {
-    return `${prefix}-${Date.now()}-${Math.floor(
-        Math.random() * 10000
-    )}`;
+    ["Airtel", "1GB", "1GB", 230, 250],
+    ["Airtel", "2GB", "2GB", 460, 500],
+    ["Airtel", "3GB", "3GB", 690, 750],
+    ["Airtel", "5GB", "5GB", 1150, 1250],
+
+    ["Glo", "1GB", "1GB", 230, 250],
+    ["Glo", "2GB", "2GB", 460, 500],
+    ["Glo", "3GB", "3GB", 690, 750],
+    ["Glo", "5GB", "5GB", 1150, 1250],
+
+    ["9mobile", "1GB", "1GB", 230, 250],
+    ["9mobile", "2GB", "2GB", 460, 500],
+    ["9mobile", "3GB", "3GB", 690, 750],
+    ["9mobile", "5GB", "5GB", 1150, 1250]
+];
+
+const insertPlan = db.prepare(`
+    INSERT OR IGNORE INTO data_plans
+    (
+        network,
+        plan_name,
+        data_size,
+        provider_cost,
+        selling_price
+    )
+    VALUES (?, ?, ?, ?, ?)
+`);
+
+const seedPlans = db.transaction(() => {
+    for (const plan of defaultPlans) {
+        insertPlan.run(...plan);
+    }
+});
+
+seedPlans();
+
+/* =====================================================
+   HELPERS
+===================================================== */
+
+function generateReference(prefix = "CD") {
+    return (
+        prefix +
+        Date.now() +
+        crypto.randomBytes(4).toString("hex").toUpperCase()
+    );
 }
 
 function isValidNigerianPhone(phone) {
-    return /^0[7-9][0-1][0-9]{8}$/.test(phone);
+    const value = String(phone || "")
+        .replace(/\s+/g, "")
+        .replace(/-/g, "");
+
+    return /^(?:\+234|234|0)(?:70|71|80|81|90|91)\d{8}$/.test(
+        value
+    );
 }
 
-function getAdmin(userId) {
-    return db.prepare(`
-        SELECT
-            id,
-            name,
-            email,
-            is_admin
-        FROM users
-        WHERE id = ?
-        AND is_admin = 1
-    `).get(userId);
+function normalizePhone(phone) {
+    let value = String(phone || "")
+        .replace(/\s+/g, "")
+        .replace(/-/g, "");
+
+    if (value.startsWith("+234")) {
+        return "0" + value.substring(4);
+    }
+
+    if (value.startsWith("234")) {
+        return "0" + value.substring(3);
+    }
+
+    return value;
 }
 
-// =========================
-// API STATUS
-// =========================
+function requireAuth(req, res, next) {
+    if (!req.session.userId) {
+        return res.status(401).json({
+            success: false,
+            message: "Please log in first."
+        });
+    }
 
-app.get("/api/status", (req, res) => {
-    res.json({
-        success: true,
-        message: "CheapData API is running"
+    const user = db
+        .prepare(
+            `
+            SELECT id, name, email, phone, balance, is_admin
+            FROM users
+            WHERE id = ?
+            `
+        )
+        .get(req.session.userId);
+
+    if (!user) {
+        req.session.destroy(() => {});
+
+        return res.status(401).json({
+            success: false,
+            message: "Session expired. Please log in again."
+        });
+    }
+
+    req.authUser = user;
+    next();
+}
+
+function requireAdmin(req, res, next) {
+    if (!req.session.userId) {
+        return res.status(401).json({
+            success: false,
+            message: "Please log in first."
+        });
+    }
+
+    const user = db
+        .prepare(
+            `
+            SELECT id, is_admin
+            FROM users
+            WHERE id = ?
+            `
+        )
+        .get(req.session.userId);
+
+    if (!user || Number(user.is_admin) !== 1) {
+        return res.status(403).json({
+            success: false,
+            message: "Admin access required."
+        });
+    }
+
+    req.adminUser = user;
+    next();
+}
+
+/* =====================================================
+   HOME
+===================================================== */
+
+app.get("/", (req, res) => {
+    res.sendFile(
+        path.join(__dirname, "public", "index.html")
+    );
+});
+
+/* =====================================================
+   SESSION
+===================================================== */
+
+app.get("/api/session", (req, res) => {
+    if (!req.session.userId) {
+        return res.json({
+            loggedIn: false
+        });
+    }
+
+    const user = db
+        .prepare(
+            `
+            SELECT
+                id,
+                name,
+                email,
+                phone,
+                balance,
+                is_admin
+            FROM users
+            WHERE id = ?
+            `
+        )
+        .get(req.session.userId);
+
+    if (!user) {
+        return res.json({
+            loggedIn: false
+        });
+    }
+
+    return res.json({
+        loggedIn: true,
+        user
     });
 });
 
-// =========================
-// REGISTER
-// =========================
+/* =====================================================
+   REGISTER
+===================================================== */
 
 app.post("/api/register", async (req, res) => {
     try {
@@ -162,113 +359,112 @@ app.post("/api/register", async (req, res) => {
             password
         } = req.body;
 
-        if (!name || !email || !phone || !password) {
+        if (
+            !name ||
+            !email ||
+            !phone ||
+            !password
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Please fill in all fields"
+                message: "Please fill in all fields."
             });
         }
 
         if (!isValidNigerianPhone(phone)) {
             return res.status(400).json({
                 success: false,
-                message: "Please enter a valid Nigerian phone number"
+                message: "Enter a valid Nigerian phone number."
             });
         }
 
         if (password.length < 6) {
             return res.status(400).json({
                 success: false,
-                message: "Password must be at least 6 characters"
+                message:
+                    "Password must be at least 6 characters."
             });
         }
 
-        const existingUser = db.prepare(`
-            SELECT id
-            FROM users
-            WHERE email = ?
-            OR phone = ?
-        `).get(email, phone);
+        const normalizedEmail =
+            String(email).trim().toLowerCase();
+
+        const existingUser = db
+            .prepare(
+                `
+                SELECT id
+                FROM users
+                WHERE email = ?
+                `
+            )
+            .get(normalizedEmail);
 
         if (existingUser) {
             return res.status(400).json({
                 success: false,
-                message: "Email or phone number already exists"
+                message:
+                    "An account with this email already exists."
             });
         }
 
-        const hashedPassword = await bcrypt.hash(
-            password,
-            10
-        );
+        const hashedPassword =
+            await bcrypt.hash(password, 12);
 
-        const result = db.prepare(`
-            INSERT INTO users (
-                name,
-                email,
-                phone,
-                password,
-                purchase_pin,
-                balance,
-                kyc_status,
-                is_admin
+        const normalizedPhone =
+            normalizePhone(phone);
+
+        const result = db
+            .prepare(
+                `
+                INSERT INTO users
+                (
+                    name,
+                    email,
+                    phone,
+                    password,
+                    balance
+                )
+                VALUES (?, ?, ?, ?, 0)
+                `
             )
-            VALUES (?, ?, ?, ?, NULL, 0, 'pending', 0)
-        `).run(
-            name,
-            email,
-            phone,
-            hashedPassword
-        );
+            .run(
+                String(name).trim(),
+                normalizedEmail,
+                normalizedPhone,
+                hashedPassword
+            );
 
-        const user = db.prepare(`
-            SELECT
-                id,
-                name,
-                email,
-                phone,
-                balance,
-                virtual_account_number,
-                virtual_bank_name,
-                kyc_status,
-                is_admin,
-                purchase_pin,
-                created_at
-            FROM users
-            WHERE id = ?
-        `).get(result.lastInsertRowid);
+        req.session.userId = result.lastInsertRowid;
 
-        const hasPurchasePin = Boolean(
-            user.purchase_pin
-        );
-
-        delete user.purchase_pin;
-
-        res.json({
+        return res.json({
             success: true,
-            message: "Account created successfully",
+            message:
+                "Account created successfully.",
             user: {
-                ...user,
-                has_purchase_pin: hasPurchasePin
+                id: result.lastInsertRowid,
+                name: String(name).trim(),
+                email: normalizedEmail,
+                phone: normalizedPhone,
+                balance: 0
             }
         });
-
     } catch (error) {
         console.error(
-            "Registration error:",
+            "REGISTER ERROR:",
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: "Registration failed"
+            message:
+                "Unable to create account."
         });
     }
 });
 
-// =========================
-// LOGIN
-// =========================
+/* =====================================================
+   LOGIN
+===================================================== */
 
 app.post("/api/login", async (req, res) => {
     try {
@@ -280,1402 +476,2127 @@ app.post("/api/login", async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
-                message: "Email and password are required"
+                message:
+                    "Email and password are required."
             });
         }
 
-        const user = db.prepare(`
-            SELECT *
-            FROM users
-            WHERE email = ?
-        `).get(email);
+        const normalizedEmail =
+            String(email).trim().toLowerCase();
+
+        const user = db
+            .prepare(
+                `
+                SELECT *
+                FROM users
+                WHERE email = ?
+                `
+            )
+            .get(normalizedEmail);
 
         if (!user) {
             return res.status(401).json({
                 success: false,
-                message: "Invalid email or password"
+                message:
+                    "Invalid email or password."
             });
         }
 
-        const passwordMatch = await bcrypt.compare(
-            password,
-            user.password
-        );
+        const passwordMatch =
+            await bcrypt.compare(
+                password,
+                user.password
+            );
 
         if (!passwordMatch) {
             return res.status(401).json({
                 success: false,
-                message: "Invalid email or password"
+                message:
+                    "Invalid email or password."
             });
         }
 
-        res.json({
+        req.session.userId = user.id;
+
+        return res.json({
             success: true,
-            message: "Login successful",
+            message: "Login successful.",
             user: {
                 id: user.id,
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
                 balance: user.balance,
-                virtual_account_number:
-                    user.virtual_account_number,
-                virtual_bank_name:
-                    user.virtual_bank_name,
-                kyc_status:
-                    user.kyc_status,
-                is_admin:
-                    user.is_admin,
-                has_purchase_pin:
-                    Boolean(user.purchase_pin),
-                created_at:
-                    user.created_at
+                is_admin: user.is_admin
             }
         });
-
     } catch (error) {
         console.error(
-            "Login error:",
+            "LOGIN ERROR:",
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: "Login failed"
+            message: "Unable to log in."
         });
     }
 });
 
-// =========================
-// GET USER
-// =========================
+/* =====================================================
+   LOGOUT
+===================================================== */
 
-app.get("/api/user/:id", (req, res) => {
-    try {
-        const user = db.prepare(`
-            SELECT
-                id,
-                name,
-                email,
+app.post("/api/logout", (req, res) => {
+    req.session.destroy((error) => {
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                message: "Unable to log out."
+            });
+        }
+
+        res.clearCookie("connect.sid");
+
+        return res.json({
+            success: true,
+            message: "Logged out successfully."
+        });
+    });
+});
+
+/* =====================================================
+   GET USER
+===================================================== */
+
+app.get(
+    "/api/user/:id",
+    requireAuth,
+    (req, res) => {
+        try {
+            const requestedId =
+                Number(req.params.id);
+
+            if (
+                requestedId !==
+                Number(req.authUser.id)
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Access denied."
+                });
+            }
+
+            const user = db
+                .prepare(
+                    `
+                    SELECT
+                        id,
+                        name,
+                        email,
+                        phone,
+                        balance,
+                        virtual_account_number,
+                        virtual_bank_name,
+                        kyc_status,
+                        is_admin,
+                        created_at
+                    FROM users
+                    WHERE id = ?
+                    `
+                )
+                .get(requestedId);
+
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: "User not found."
+                });
+            }
+
+            return res.json({
+                success: true,
+                user
+            });
+        } catch (error) {
+            console.error(
+                "GET USER ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to load user."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   DEVELOPMENT TEST FUNDING
+   Only available when NODE_ENV is not production.
+===================================================== */
+
+app.post(
+    "/api/test-fund",
+    requireAuth,
+    (req, res) => {
+        if (
+            process.env.NODE_ENV ===
+            "production"
+        ) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "Test funding is disabled in production."
+            });
+        }
+
+        try {
+            const amount =
+                Number(req.body.amount);
+
+            if (
+                !Number.isFinite(amount) ||
+                amount <= 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Enter a valid amount."
+                });
+            }
+
+            const reference =
+                generateReference("TEST");
+
+            const transaction =
+                db.transaction(() => {
+                    db.prepare(
+                        `
+                        UPDATE users
+                        SET balance = balance + ?
+                        WHERE id = ?
+                        `
+                    ).run(
+                        amount,
+                        req.authUser.id
+                    );
+
+                    db.prepare(
+                        `
+                        INSERT INTO transactions
+                        (
+                            user_id,
+                            type,
+                            amount,
+                            status,
+                            reference,
+                            description
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        `
+                    ).run(
+                        req.authUser.id,
+                        "wallet_funding",
+                        amount,
+                        "successful",
+                        reference,
+                        "Development test wallet funding"
+                    );
+                });
+
+            transaction();
+
+            const updatedUser =
+                db.prepare(
+                    `
+                    SELECT balance
+                    FROM users
+                    WHERE id = ?
+                    `
+                ).get(req.authUser.id);
+
+            return res.json({
+                success: true,
+                message:
+                    "Test funding successful.",
+                balance:
+                    updatedUser.balance,
+                reference
+            });
+        } catch (error) {
+            console.error(
+                "TEST FUND ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to fund wallet."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   GET DATA PLANS
+===================================================== */
+
+app.get(
+    "/api/data-plans",
+    requireAuth,
+    (req, res) => {
+        try {
+            const plans = db
+                .prepare(
+                    `
+                    SELECT
+                        id,
+                        network,
+                        plan_name,
+                        data_size,
+                        provider_cost,
+                        selling_price
+                    FROM data_plans
+                    WHERE status = 1
+                    ORDER BY
+                        CASE network
+                            WHEN 'MTN' THEN 1
+                            WHEN 'Airtel' THEN 2
+                            WHEN 'Glo' THEN 3
+                            WHEN '9mobile' THEN 4
+                            ELSE 5
+                        END,
+                        id ASC
+                    `
+                )
+                .all();
+
+            return res.json({
+                success: true,
+                plans
+            });
+        } catch (error) {
+            console.error(
+                "GET DATA PLANS ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to load data plans."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   BUY DATA
+===================================================== */
+
+app.post(
+    "/api/buy-data",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const {
+                network,
+                plan,
                 phone,
-                balance,
-                virtual_account_number,
-                virtual_bank_name,
-                kyc_status,
-                is_admin,
-                purchase_pin,
-                created_at
-            FROM users
-            WHERE id = ?
-        `).get(req.params.id);
+                purchasePin
+            } = req.body;
 
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
+            /* -----------------------------------------
+               BASIC VALIDATION
+            ----------------------------------------- */
 
-        const hasPurchasePin = Boolean(
-            user.purchase_pin
-        );
-
-        delete user.purchase_pin;
-
-        res.json({
-            success: true,
-            user: {
-                ...user,
-                has_purchase_pin: hasPurchasePin
+            if (
+                !network ||
+                !plan ||
+                !phone ||
+                !purchasePin
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Network, plan, phone and purchase PIN are required."
+                });
             }
-        });
 
-    } catch (error) {
-        console.error(
-            "User error:",
-            error
-        );
+            const allowedNetworks = [
+                "MTN",
+                "Airtel",
+                "Glo",
+                "9mobile"
+            ];
 
-        res.status(500).json({
-            success: false,
-            message: "Could not load user"
-        });
-    }
-});
+            if (
+                !allowedNetworks.includes(
+                    String(network)
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid network."
+                });
+            }
 
-// =========================
-// PURCHASE PIN
-// =========================
+            if (!isValidNigerianPhone(phone)) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Enter a valid Nigerian phone number."
+                });
+            }
 
-// SET PURCHASE PIN
+            if (
+                !/^\d{4}$/.test(
+                    String(purchasePin)
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Purchase PIN must be exactly 4 digits."
+                });
+            }
 
-app.post("/api/purchase-pin/set", async (req, res) => {
-    try {
-        const {
-            userId,
-            pin
-        } = req.body;
+            /* -----------------------------------------
+               FIND PLAN FROM DATABASE
+               NEVER TRUST PRICE FROM BROWSER
+            ----------------------------------------- */
 
-        if (!userId || pin === undefined) {
-            return res.status(400).json({
-                success: false,
-                message: "User ID and PIN are required"
-            });
-        }
+            const selectedPlan =
+                db.prepare(
+                    `
+                    SELECT
+                        id,
+                        network,
+                        plan_name,
+                        data_size,
+                        provider_cost,
+                        selling_price
+                    FROM data_plans
+                    WHERE network = ?
+                    AND plan_name = ?
+                    AND status = 1
+                    LIMIT 1
+                    `
+                ).get(
+                    String(network),
+                    String(plan)
+                );
 
-        const pinString = String(pin);
+            if (!selectedPlan) {
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "Selected data plan is unavailable."
+                });
+            }
 
-        if (!/^\d{4}$/.test(pinString)) {
-            return res.status(400).json({
-                success: false,
-                message: "Purchase PIN must be exactly 4 digits"
-            });
-        }
+            /* -----------------------------------------
+               GET USER
+            ----------------------------------------- */
 
-        const user = db.prepare(`
-            SELECT
-                id,
-                purchase_pin
-            FROM users
-            WHERE id = ?
-        `).get(userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        if (user.purchase_pin) {
-            return res.status(400).json({
-                success: false,
-                message: "Purchase PIN has already been set"
-            });
-        }
-
-        const hashedPin = await bcrypt.hash(
-            pinString,
-            10
-        );
-
-        db.prepare(`
-            UPDATE users
-            SET purchase_pin = ?
-            WHERE id = ?
-        `).run(
-            hashedPin,
-            userId
-        );
-
-        res.json({
-            success: true,
-            message: "Purchase PIN created successfully"
-        });
-
-    } catch (error) {
-        console.error(
-            "Set Purchase PIN error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Could not create Purchase PIN"
-        });
-    }
-});
-
-// CHANGE PURCHASE PIN
-
-app.post("/api/purchase-pin/change", async (req, res) => {
-    try {
-        const {
-            userId,
-            currentPin,
-            newPin
-        } = req.body;
-
-        if (
-            !userId ||
-            currentPin === undefined ||
-            newPin === undefined
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "All PIN fields are required"
-            });
-        }
-
-        const currentPinString =
-            String(currentPin);
-
-        const newPinString =
-            String(newPin);
-
-        if (!/^\d{4}$/.test(currentPinString)) {
-            return res.status(400).json({
-                success: false,
-                message: "Current PIN must be exactly 4 digits"
-            });
-        }
-
-        if (!/^\d{4}$/.test(newPinString)) {
-            return res.status(400).json({
-                success: false,
-                message: "New PIN must be exactly 4 digits"
-            });
-        }
-
-        if (currentPinString === newPinString) {
-            return res.status(400).json({
-                success: false,
-                message: "New PIN must be different from current PIN"
-            });
-        }
-
-        const user = db.prepare(`
-            SELECT
-                id,
-                purchase_pin
-            FROM users
-            WHERE id = ?
-        `).get(userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        if (!user.purchase_pin) {
-            return res.status(400).json({
-                success: false,
-                message: "Purchase PIN has not been set"
-            });
-        }
-
-        const pinCorrect = await bcrypt.compare(
-            currentPinString,
-            user.purchase_pin
-        );
-
-        if (!pinCorrect) {
-            return res.status(401).json({
-                success: false,
-                message: "Current Purchase PIN is incorrect"
-            });
-        }
-
-        const hashedNewPin = await bcrypt.hash(
-            newPinString,
-            10
-        );
-
-        db.prepare(`
-            UPDATE users
-            SET purchase_pin = ?
-            WHERE id = ?
-        `).run(
-            hashedNewPin,
-            userId
-        );
-
-        res.json({
-            success: true,
-            message: "Purchase PIN changed successfully"
-        });
-
-    } catch (error) {
-        console.error(
-            "Change Purchase PIN error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Could not change Purchase PIN"
-        });
-    }
-});
-
-// VERIFY PURCHASE PIN
-
-app.post("/api/purchase-pin/verify", async (req, res) => {
-    try {
-        const {
-            userId,
-            pin
-        } = req.body;
-
-        if (!userId || pin === undefined) {
-            return res.status(400).json({
-                success: false,
-                message: "User ID and PIN are required"
-            });
-        }
-
-        const pinString = String(pin);
-
-        if (!/^\d{4}$/.test(pinString)) {
-            return res.status(400).json({
-                success: false,
-                message: "Purchase PIN must be exactly 4 digits"
-            });
-        }
-
-        const user = db.prepare(`
-            SELECT
-                id,
-                purchase_pin
-            FROM users
-            WHERE id = ?
-        `).get(userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        if (!user.purchase_pin) {
-            return res.status(400).json({
-                success: false,
-                message: "Purchase PIN has not been set"
-            });
-        }
-
-        const pinCorrect = await bcrypt.compare(
-            pinString,
-            user.purchase_pin
-        );
-
-        if (!pinCorrect) {
-            return res.status(401).json({
-                success: false,
-                message: "Incorrect Purchase PIN"
-            });
-        }
-
-        res.json({
-            success: true,
-            message: "Purchase PIN verified"
-        });
-
-    } catch (error) {
-        console.error(
-            "Verify Purchase PIN error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Could not verify Purchase PIN"
-        });
-    }
-});
-
-// =========================
-// TEST FUND
-// DEVELOPMENT ONLY
-// =========================
-
-app.post("/api/test-fund", (req, res) => {
-    try {
-        const {
-            userId,
-            amount
-        } = req.body;
-
-        const fundAmount = Number(amount);
-
-        if (
-            !userId ||
-            !Number.isFinite(fundAmount) ||
-            fundAmount <= 0
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid funding details"
-            });
-        }
-
-        const user = db.prepare(`
-            SELECT
-                id,
-                balance
-            FROM users
-            WHERE id = ?
-        `).get(userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        const reference =
-            generateReference("TEST");
-
-        const transaction =
-            db.transaction(() => {
-
-                db.prepare(`
-                    UPDATE users
-                    SET balance = balance + ?
+            const user =
+                db.prepare(
+                    `
+                    SELECT
+                        id,
+                        name,
+                        balance,
+                        purchase_pin
+                    FROM users
                     WHERE id = ?
-                `).run(
-                    fundAmount,
-                    userId
+                    `
+                ).get(
+                    req.authUser.id
                 );
 
-                db.prepare(`
-                    INSERT INTO transactions (
-                        user_id,
-                        type,
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "User account not found."
+                });
+            }
+
+            /* -----------------------------------------
+               CHECK PURCHASE PIN
+            ----------------------------------------- */
+
+            if (!user.purchase_pin) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Please set your purchase PIN first."
+                });
+            }
+
+            const pinMatches =
+                await bcrypt.compare(
+                    String(purchasePin),
+                    user.purchase_pin
+                );
+
+            if (!pinMatches) {
+                return res.status(401).json({
+                    success: false,
+                    message:
+                        "Incorrect purchase PIN."
+                });
+            }
+
+            /* -----------------------------------------
+               SERVER-SIDE PRICE
+            ----------------------------------------- */
+
+            const amount =
+                Number(
+                    selectedPlan.selling_price
+                );
+
+            if (
+                !Number.isFinite(amount) ||
+                amount <= 0
+            ) {
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "Invalid plan price."
+                });
+            }
+
+            /* -----------------------------------------
+               CHECK BALANCE
+            ----------------------------------------- */
+
+            if (
+                Number(user.balance) <
+                amount
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Insufficient wallet balance."
+                });
+            }
+
+            /* -----------------------------------------
+               NORMALIZE PHONE
+            ----------------------------------------- */
+
+            const normalizedPhone =
+                normalizePhone(phone);
+
+            /* -----------------------------------------
+               CREATE REFERENCE
+            ----------------------------------------- */
+
+            const reference =
+                generateReference("DATA");
+
+            /* -----------------------------------------
+               WALLET TRANSACTION
+            ----------------------------------------- */
+
+            const purchase =
+                db.transaction(() => {
+                    const update =
+                        db.prepare(
+                            `
+                            UPDATE users
+                            SET balance =
+                                balance - ?
+                            WHERE id = ?
+                            AND balance >= ?
+                            `
+                        ).run(
+                            amount,
+                            user.id,
+                            amount
+                        );
+
+                    if (
+                        update.changes !== 1
+                    ) {
+                        throw new Error(
+                            "Insufficient wallet balance."
+                        );
+                    }
+
+                    db.prepare(
+                        `
+                        INSERT INTO transactions
+                        (
+                            user_id,
+                            type,
+                            amount,
+                            status,
+                            reference,
+                            description
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        `
+                    ).run(
+                        user.id,
+                        "data",
                         amount,
-                        status,
+                        "successful",
                         reference,
-                        description
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                `).run(
-                    userId,
-                    "wallet_funding",
-                    fundAmount,
-                    "successful",
-                    reference,
-                    "Development test wallet funding"
-                );
-            });
+                        `${selectedPlan.network} ${selectedPlan.plan_name} data purchase for ${normalizedPhone}`
+                    );
+                });
 
-        transaction();
+            purchase();
 
-        const updatedUser = db.prepare(`
-            SELECT balance
-            FROM users
-            WHERE id = ?
-        `).get(userId);
+            /* -----------------------------------------
+               GET NEW BALANCE
+            ----------------------------------------- */
 
-        res.json({
-            success: true,
-            message: "Wallet funded successfully",
-            balance: updatedUser.balance,
-            reference
-        });
-
-    } catch (error) {
-        console.error(
-            "Test fund error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Could not fund wallet"
-        });
-    }
-});
-
-// =========================
-// PURCHASE DATA
-// =========================
-
-app.post("/api/purchase-data", async (req, res) => {
-    try {
-        const {
-            userId,
-            network,
-            phone,
-            plan,
-            pin
-        } = req.body;
-
-        if (
-            !userId ||
-            !network ||
-            !phone ||
-            !plan ||
-            pin === undefined
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Please provide all purchase details including your Purchase PIN"
-            });
-        }
-
-        const pinString = String(pin);
-
-        if (!/^\d{4}$/.test(pinString)) {
-            return res.status(400).json({
-                success: false,
-                message: "Purchase PIN must be exactly 4 digits"
-            });
-        }
-
-        if (!isValidNigerianPhone(phone)) {
-            return res.status(400).json({
-                success: false,
-                message: "Please enter a valid Nigerian phone number"
-            });
-        }
-
-        const allowedNetworks = [
-            "MTN",
-            "Airtel",
-            "Glo",
-            "9mobile"
-        ];
-
-        if (!allowedNetworks.includes(network)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid network"
-            });
-        }
-
-        const dataPlans = {
-            "1GB": 250,
-            "2GB": 500,
-            "5GB": 1250,
-            "10GB": 2500,
-            "20GB": 5000,
-            "40GB": 10000
-        };
-
-        if (
-            !Object.prototype.hasOwnProperty.call(
-                dataPlans,
-                plan
-            )
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid data plan"
-            });
-        }
-
-        const price = dataPlans[plan];
-
-        const user = db.prepare(`
-            SELECT
-                id,
-                balance,
-                purchase_pin
-            FROM users
-            WHERE id = ?
-        `).get(userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        if (!user.purchase_pin) {
-            return res.status(400).json({
-                success: false,
-                message: "Please create a Purchase PIN before buying data"
-            });
-        }
-
-        const pinCorrect = await bcrypt.compare(
-            pinString,
-            user.purchase_pin
-        );
-
-        if (!pinCorrect) {
-            return res.status(401).json({
-                success: false,
-                message: "Incorrect Purchase PIN"
-            });
-        }
-
-        if (user.balance < price) {
-            return res.status(400).json({
-                success: false,
-                message: "Insufficient wallet balance"
-            });
-        }
-
-        const reference =
-            generateReference("DATA");
-
-        const transaction =
-            db.transaction(() => {
-
-                db.prepare(`
-                    UPDATE users
-                    SET balance = balance - ?
+            const updatedUser =
+                db.prepare(
+                    `
+                    SELECT balance
+                    FROM users
                     WHERE id = ?
-                    AND balance >= ?
-                `).run(
-                    price,
-                    userId,
-                    price
-                );
+                    `
+                ).get(user.id);
 
-                db.prepare(`
-                    INSERT INTO transactions (
-                        user_id,
-                        type,
-                        amount,
-                        status,
-                        reference,
-                        description
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                `).run(
-                    userId,
-                    "debit",
-                    price,
-                    "successful",
-                    reference,
-                    `${network} ${plan} data purchase for ${phone}`
-                );
-            });
+            /*
+             * IMPORTANT:
+             * This currently records the purchase and
+             * deducts the wallet.
+             *
+             * It does NOT yet send real data to MTN,
+             * Airtel, Glo or 9mobile.
+             *
+             * VTU provider integration comes next.
+             */
 
-        transaction();
-
-        const updatedUser = db.prepare(`
-            SELECT balance
-            FROM users
-            WHERE id = ?
-        `).get(userId);
-
-        res.json({
-            success: true,
-            message: "Data purchase successful",
-            network,
-            plan,
-            phone,
-            amount: price,
-            balance: updatedUser.balance,
-            reference
-        });
-
-    } catch (error) {
-        console.error(
-            "Data purchase error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Data purchase failed"
-        });
-    }
-});
-
-// =========================
-// PURCHASE AIRTIME
-// =========================
-
-app.post("/api/purchase-airtime", async (req, res) => {
-    try {
-        const {
-            userId,
-            network,
-            phone,
-            amount,
-            pin
-        } = req.body;
-
-        const airtimeAmount = Number(amount);
-
-        if (
-            !userId ||
-            !network ||
-            !phone ||
-            !amount ||
-            pin === undefined
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Please provide all purchase details including your Purchase PIN"
-            });
-        }
-
-        const pinString = String(pin);
-
-        if (!/^\d{4}$/.test(pinString)) {
-            return res.status(400).json({
-                success: false,
-                message: "Purchase PIN must be exactly 4 digits"
-            });
-        }
-
-        const allowedNetworks = [
-            "MTN",
-            "Airtel",
-            "Glo",
-            "9mobile"
-        ];
-
-        if (!allowedNetworks.includes(network)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid network"
-            });
-        }
-
-        if (!isValidNigerianPhone(phone)) {
-            return res.status(400).json({
-                success: false,
-                message: "Please enter a valid Nigerian phone number"
-            });
-        }
-
-        if (
-            !Number.isFinite(airtimeAmount) ||
-            airtimeAmount < 50 ||
-            airtimeAmount > 50000
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Airtime amount must be between ₦50 and ₦50,000"
-            });
-        }
-
-        const user = db.prepare(`
-            SELECT
-                id,
-                balance,
-                purchase_pin
-            FROM users
-            WHERE id = ?
-        `).get(userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        if (!user.purchase_pin) {
-            return res.status(400).json({
-                success: false,
-                message: "Please create a Purchase PIN before buying airtime"
-            });
-        }
-
-        const pinCorrect = await bcrypt.compare(
-            pinString,
-            user.purchase_pin
-        );
-
-        if (!pinCorrect) {
-            return res.status(401).json({
-                success: false,
-                message: "Incorrect Purchase PIN"
-            });
-        }
-
-        if (user.balance < airtimeAmount) {
-            return res.status(400).json({
-                success: false,
-                message: "Insufficient wallet balance"
-            });
-        }
-
-        const reference =
-            generateReference("AIRTIME");
-
-        const transaction =
-            db.transaction(() => {
-
-                db.prepare(`
-                    UPDATE users
-                    SET balance = balance - ?
-                    WHERE id = ?
-                    AND balance >= ?
-                `).run(
-                    airtimeAmount,
-                    userId,
-                    airtimeAmount
-                );
-
-                db.prepare(`
-                    INSERT INTO transactions (
-                        user_id,
-                        type,
-                        amount,
-                        status,
-                        reference,
-                        description
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                `).run(
-                    userId,
-                    "debit",
-                    airtimeAmount,
-                    "successful",
-                    reference,
-                    `${network} airtime purchase for ${phone}`
-                );
-            });
-
-        transaction();
-
-        const updatedUser = db.prepare(`
-            SELECT balance
-            FROM users
-            WHERE id = ?
-        `).get(userId);
-
-        res.json({
-            success: true,
-            message: "Airtime purchase successful",
-            network,
-            phone,
-            amount: airtimeAmount,
-            balance: updatedUser.balance,
-            reference
-        });
-
-    } catch (error) {
-        console.error(
-            "Airtime purchase error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Airtime purchase failed"
-        });
-    }
-});
-
-// =========================
-// USER TRANSACTIONS
-// =========================
-
-app.get("/api/transactions/:userId", (req, res) => {
-    try {
-        const transactions = db.prepare(`
-            SELECT
-                id,
-                type,
-                amount,
-                status,
+            return res.json({
+                success: true,
+                message:
+                    "Data purchase recorded successfully.",
                 reference,
-                description,
-                created_at
-            FROM transactions
-            WHERE user_id = ?
-            ORDER BY id DESC
-        `).all(req.params.userId);
+                network:
+                    selectedPlan.network,
+                plan:
+                    selectedPlan.plan_name,
+                phone:
+                    normalizedPhone,
+                amount,
+                balance:
+                    updatedUser.balance
+            });
+        } catch (error) {
+            console.error(
+                "BUY DATA ERROR:",
+                error
+            );
 
-        res.json({
-            success: true,
-            transactions
-        });
-
-    } catch (error) {
-        console.error(
-            "Transactions error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Could not load transactions"
-        });
-    }
-});
-
-// =========================
-// ADMIN STATS
-// =========================
-
-app.get("/api/admin/stats/:userId", (req, res) => {
-    try {
-        const admin = getAdmin(req.params.userId);
-
-        if (!admin) {
-            return res.status(403).json({
+            return res.status(500).json({
                 success: false,
-                message: "Admin access required"
+                message:
+                    error.message ===
+                    "Insufficient wallet balance."
+                        ? error.message
+                        : "Unable to process data purchase."
             });
         }
-
-        const totalUsers = db.prepare(`
-            SELECT COUNT(*) AS count
-            FROM users
-        `).get().count;
-
-        const totalBalance = db.prepare(`
-            SELECT COALESCE(SUM(balance), 0) AS total
-            FROM users
-        `).get().total;
-
-        const totalTransactions = db.prepare(`
-            SELECT COUNT(*) AS count
-            FROM transactions
-        `).get().count;
-
-        const dataPurchases = db.prepare(`
-            SELECT COUNT(*) AS count
-            FROM transactions
-            WHERE type = 'debit'
-            AND status = 'successful'
-            AND description LIKE '%data purchase%'
-        `).get().count;
-
-        const airtimePurchases = db.prepare(`
-            SELECT COUNT(*) AS count
-            FROM transactions
-            WHERE type = 'debit'
-            AND status = 'successful'
-            AND description LIKE '%airtime purchase%'
-        `).get().count;
-
-        const totalRevenue = db.prepare(`
-            SELECT COALESCE(SUM(amount), 0) AS total
-            FROM transactions
-            WHERE type = 'debit'
-            AND status = 'successful'
-            AND (
-                description LIKE '%data purchase%'
-                OR description LIKE '%airtime purchase%'
-            )
-        `).get().total;
-
-        res.json({
-            success: true,
-            stats: {
-                totalUsers,
-                totalBalance,
-                totalTransactions,
-                dataPurchases,
-                airtimePurchases,
-                totalRevenue
-            }
-        });
-
-    } catch (error) {
-        console.error(
-            "Admin stats error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Could not load admin statistics"
-        });
     }
-});
+);
 
-// =========================
-// ADMIN USERS
-// =========================
+/* =====================================================
+   BUY AIRTIME
+===================================================== */
 
-app.get("/api/admin/users/:userId", (req, res) => {
-    try {
-        const admin = getAdmin(req.params.userId);
-
-        if (!admin) {
-            return res.status(403).json({
-                success: false,
-                message: "Admin access required"
-            });
-        }
-
-        const users = db.prepare(`
-            SELECT
-                id,
-                name,
-                email,
+app.post(
+    "/api/buy-airtime",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const {
+                network,
                 phone,
-                balance,
-                virtual_account_number,
-                virtual_bank_name,
-                kyc_status,
-                is_admin,
-                created_at
-            FROM users
-            ORDER BY id DESC
-        `).all();
+                amount,
+                purchasePin
+            } = req.body;
 
-        res.json({
-            success: true,
-            users
-        });
+            if (
+                !network ||
+                !phone ||
+                !amount ||
+                !purchasePin
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Network, phone, amount and purchase PIN are required."
+                });
+            }
 
-    } catch (error) {
-        console.error(
-            "Admin users error:",
-            error
-        );
+            const allowedNetworks = [
+                "MTN",
+                "Airtel",
+                "Glo",
+                "9mobile"
+            ];
 
-        res.status(500).json({
-            success: false,
-            message: "Could not load users"
-        });
-    }
-});
+            if (
+                !allowedNetworks.includes(
+                    String(network)
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid network."
+                });
+            }
 
-// =========================
-// ADMIN TRANSACTIONS
-// =========================
+            if (!isValidNigerianPhone(phone)) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Enter a valid Nigerian phone number."
+                });
+            }
 
-app.get("/api/admin/transactions/:userId", (req, res) => {
-    try {
-        const admin = getAdmin(req.params.userId);
+            const airtimeAmount =
+                Number(amount);
 
-        if (!admin) {
-            return res.status(403).json({
+            if (
+                !Number.isFinite(
+                    airtimeAmount
+                ) ||
+                airtimeAmount < 50 ||
+                airtimeAmount > 50000
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Airtime amount must be between ₦50 and ₦50,000."
+                });
+            }
+
+            if (
+                !/^\d{4}$/.test(
+                    String(purchasePin)
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Purchase PIN must be exactly 4 digits."
+                });
+            }
+
+            const user =
+                db.prepare(
+                    `
+                    SELECT
+                        id,
+                        balance,
+                        purchase_pin
+                    FROM users
+                    WHERE id = ?
+                    `
+                ).get(
+                    req.authUser.id
+                );
+
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "User account not found."
+                });
+            }
+
+            if (!user.purchase_pin) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Please set your purchase PIN first."
+                });
+            }
+
+            const pinMatches =
+                await bcrypt.compare(
+                    String(purchasePin),
+                    user.purchase_pin
+                );
+
+            if (!pinMatches) {
+                return res.status(401).json({
+                    success: false,
+                    message:
+                        "Incorrect purchase PIN."
+                });
+            }
+
+            if (
+                Number(user.balance) <
+                airtimeAmount
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Insufficient wallet balance."
+                });
+            }
+
+            const normalizedPhone =
+                normalizePhone(phone);
+
+            const reference =
+                generateReference("AIR");
+
+            const purchase =
+                db.transaction(() => {
+                    const update =
+                        db.prepare(
+                            `
+                            UPDATE users
+                            SET balance =
+                                balance - ?
+                            WHERE id = ?
+                            AND balance >= ?
+                            `
+                        ).run(
+                            airtimeAmount,
+                            user.id,
+                            airtimeAmount
+                        );
+
+                    if (
+                        update.changes !== 1
+                    ) {
+                        throw new Error(
+                            "Insufficient wallet balance."
+                        );
+                    }
+
+                    db.prepare(
+                        `
+                        INSERT INTO transactions
+                        (
+                            user_id,
+                            type,
+                            amount,
+                            status,
+                            reference,
+                            description
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        `
+                    ).run(
+                        user.id,
+                        "airtime",
+                        airtimeAmount,
+                        "successful",
+                        reference,
+                        `${network} airtime purchase for ${normalizedPhone}`
+                    );
+                });
+
+            purchase();
+
+            const updatedUser =
+                db.prepare(
+                    `
+                    SELECT balance
+                    FROM users
+                    WHERE id = ?
+                    `
+                ).get(user.id);
+
+            return res.json({
+                success: true,
+                message:
+                    "Airtime purchase recorded successfully.",
+                reference,
+                network,
+                phone: normalizedPhone,
+                amount: airtimeAmount,
+                balance:
+                    updatedUser.balance
+            });
+        } catch (error) {
+            console.error(
+                "BUY AIRTIME ERROR:",
+                error
+            );
+
+            return res.status(500).json({
                 success: false,
-                message: "Admin access required"
+                message:
+                    error.message ===
+                    "Insufficient wallet balance."
+                        ? error.message
+                        : "Unable to process airtime purchase."
             });
         }
-
-        const transactions = db.prepare(`
-            SELECT
-                transactions.id,
-                users.name AS user_name,
-                users.email AS user_email,
-                transactions.type,
-                transactions.amount,
-                transactions.status,
-                transactions.reference,
-                transactions.description,
-                transactions.created_at
-            FROM transactions
-            INNER JOIN users
-                ON users.id = transactions.user_id
-            ORDER BY transactions.id DESC
-            LIMIT 100
-        `).all();
-
-        res.json({
-            success: true,
-            transactions
-        });
-
-    } catch (error) {
-        console.error(
-            "Admin transactions error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Could not load admin transactions"
-        });
     }
-});
+);
 
-// =========================
-// SERVER
-// =========================
+/* =====================================================
+   SET PURCHASE PIN
+===================================================== */
 
-// =========================
-// FORGOT PASSWORD
-// =========================
+app.post(
+    "/api/set-purchase-pin",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const { pin } = req.body;
 
-app.post("/api/forgot-password", (req, res) => {
-    try {
-        const email = String(req.body.email || "").trim().toLowerCase();
+            if (!/^\d{4}$/.test(String(pin || ""))) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Purchase PIN must be exactly 4 digits."
+                });
+            }
 
-        if (!email) {
-            return res.status(400).json({
+            const hashedPin =
+                await bcrypt.hash(
+                    String(pin),
+                    12
+                );
+
+            db.prepare(
+                `
+                UPDATE users
+                SET purchase_pin = ?
+                WHERE id = ?
+                `
+            ).run(
+                hashedPin,
+                req.authUser.id
+            );
+
+            return res.json({
+                success: true,
+                message:
+                    "Purchase PIN set successfully."
+            });
+        } catch (error) {
+            console.error(
+                "SET PIN ERROR:",
+                error
+            );
+
+            return res.status(500).json({
                 success: false,
-                message: "Please enter your email address."
+                message:
+                    "Unable to set purchase PIN."
             });
         }
+    }
+);
 
-        const user = db.prepare(`
-            SELECT id, email
-            FROM users
-            WHERE LOWER(email) = ?
-        `).get(email);
+/* =====================================================
+   CHANGE PURCHASE PIN
+===================================================== */
 
-        // Always return the same message whether the email exists or not.
-        // This helps prevent account enumeration.
-        if (!user) {
+app.post(
+    "/api/change-purchase-pin",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const {
+                currentPin,
+                newPin
+            } = req.body;
+
+            if (
+                !/^\d{4}$/.test(
+                    String(currentPin || "")
+                ) ||
+                !/^\d{4}$/.test(
+                    String(newPin || "")
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Both PINs must be exactly 4 digits."
+                });
+            }
+
+            const user =
+                db.prepare(
+                    `
+                    SELECT purchase_pin
+                    FROM users
+                    WHERE id = ?
+                    `
+                ).get(
+                    req.authUser.id
+                );
+
+            if (
+                !user ||
+                !user.purchase_pin
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Purchase PIN has not been set."
+                });
+            }
+
+            const matches =
+                await bcrypt.compare(
+                    String(currentPin),
+                    user.purchase_pin
+                );
+
+            if (!matches) {
+                return res.status(401).json({
+                    success: false,
+                    message:
+                        "Current purchase PIN is incorrect."
+                });
+            }
+
+            const hashedPin =
+                await bcrypt.hash(
+                    String(newPin),
+                    12
+                );
+
+            db.prepare(
+                `
+                UPDATE users
+                SET purchase_pin = ?
+                WHERE id = ?
+                `
+            ).run(
+                hashedPin,
+                req.authUser.id
+            );
+
+            return res.json({
+                success: true,
+                message:
+                    "Purchase PIN changed successfully."
+            });
+        } catch (error) {
+            console.error(
+                "CHANGE PIN ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to change purchase PIN."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   VERIFY PURCHASE PIN
+===================================================== */
+
+app.post(
+    "/api/verify-purchase-pin",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const { pin } = req.body;
+
+            if (!/^\d{4}$/.test(String(pin || ""))) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Enter a valid 4-digit PIN."
+                });
+            }
+
+            const user =
+                db.prepare(
+                    `
+                    SELECT purchase_pin
+                    FROM users
+                    WHERE id = ?
+                    `
+                ).get(
+                    req.authUser.id
+                );
+
+            if (
+                !user ||
+                !user.purchase_pin
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Purchase PIN has not been set."
+                });
+            }
+
+            const matches =
+                await bcrypt.compare(
+                    String(pin),
+                    user.purchase_pin
+                );
+
+            return res.json({
+                success: true,
+                valid: matches,
+                message: matches
+                    ? "PIN is correct."
+                    : "PIN is incorrect."
+            });
+        } catch (error) {
+            console.error(
+                "VERIFY PIN ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to verify PIN."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   TRANSACTION HISTORY
+===================================================== */
+
+app.get(
+    "/api/transactions",
+    requireAuth,
+    (req, res) => {
+        try {
+            const transactions =
+                db.prepare(
+                    `
+                    SELECT
+                        id,
+                        type,
+                        amount,
+                        status,
+                        reference,
+                        description,
+                        created_at
+                    FROM transactions
+                    WHERE user_id = ?
+                    ORDER BY id DESC
+                    `
+                ).all(
+                    req.authUser.id
+                );
+
+            return res.json({
+                success: true,
+                transactions
+            });
+        } catch (error) {
+            console.error(
+                "TRANSACTION HISTORY ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to load transactions."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   FORGOT PASSWORD
+===================================================== */
+
+app.post(
+    "/api/forgot-password",
+    async (req, res) => {
+        try {
+            const { email } = req.body;
+
+            if (!email) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Email address is required."
+                });
+            }
+
+            const normalizedEmail =
+                String(email)
+                    .trim()
+                    .toLowerCase();
+
+            const user =
+                db.prepare(
+                    `
+                    SELECT id, email
+                    FROM users
+                    WHERE email = ?
+                    `
+                ).get(
+                    normalizedEmail
+                );
+
+            /*
+             * We deliberately return the same
+             * response whether the account exists
+             * or not.
+             */
+
+            if (!user) {
+                return res.json({
+                    success: true,
+                    message:
+                        "If an account exists with that email, password reset instructions will be provided."
+                });
+            }
+
+            const resetToken =
+                crypto.randomBytes(32).toString(
+                    "hex"
+                );
+
+            const tokenHash =
+                crypto
+                    .createHash("sha256")
+                    .update(resetToken)
+                    .digest("hex");
+
+            const expiresAt =
+                new Date(
+                    Date.now() +
+                        30 * 60 * 1000
+                ).toISOString();
+
+            db.prepare(
+                `
+                UPDATE users
+                SET
+                    reset_token_hash = ?,
+                    reset_token_expires_at = ?
+                WHERE id = ?
+                `
+            ).run(
+                tokenHash,
+                expiresAt,
+                user.id
+            );
+
+            /*
+             * Email delivery should be connected
+             * later through a real email provider.
+             *
+             * During development the token is logged
+             * in the terminal.
+             */
+
+            console.log(
+                "PASSWORD RESET TOKEN:",
+                resetToken
+            );
+
             return res.json({
                 success: true,
                 message:
                     "If an account exists with that email, password reset instructions will be provided."
             });
-        }
-
-        // Generate a secure random reset token
-        const resetToken = crypto.randomBytes(32).toString("hex");
-
-        // Store only the SHA-256 hash of the token
-        const resetTokenHash = crypto
-            .createHash("sha256")
-            .update(resetToken)
-            .digest("hex");
-
-        // Token expires in 15 minutes
-        const expiresAt = Date.now() + (15 * 60 * 1000);
-
-        db.prepare(`
-            UPDATE users
-            SET reset_token_hash = ?,
-                reset_token_expires_at = ?
-            WHERE id = ?
-        `).run(
-            resetTokenHash,
-            expiresAt,
-            user.id
-        );
-
-        // DEVELOPMENT ONLY:
-        // This prints the reset link in the terminal.
-        const resetUrl =
-            `http://localhost:3000/reset-password.html?token=${resetToken}`;
-
-        console.log("");
-        console.log("======================================");
-        console.log("PASSWORD RESET REQUEST");
-        console.log("======================================");
-        console.log(`Email: ${user.email}`);
-        console.log(`Reset link: ${resetUrl}`);
-        console.log("Expires in: 15 minutes");
-        console.log("======================================");
-        console.log("");
-
-        return res.json({
-            success: true,
-            message:
-                "If an account exists with that email, password reset instructions will be provided."
-        });
-
-    } catch (error) {
-        console.error("Forgot password error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Something went wrong. Please try again."
-        });
-    }
-});
-// =========================
-// RESET PASSWORD
-// =========================
-
-app.post("/api/reset-password", async (req, res) => {
-    try {
-        const { token, newPassword } = req.body;
-
-        if (!token || !newPassword) {
-            return res.status(400).json({
-                success: false,
-                message: "Reset token and new password are required."
-            });
-        }
-
-        if (newPassword.length < 6) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 6 characters."
-            });
-        }
-
-        // Hash the token received from the reset link
-        const tokenHash = crypto
-            .createHash("sha256")
-            .update(token)
-            .digest("hex");
-
-        // Find a user with this token
-        const user = db.prepare(`
-            SELECT id, reset_token_hash, reset_token_expires_at
-            FROM users
-            WHERE reset_token_hash = ?
-        `).get(tokenHash);
-
-        if (!user) {
-            return res.status(400).json({
-                success: false,
-                message: "This password reset link is invalid or has already been used."
-            });
-        }
-
-        // Check whether the token has expired
-        if (
-            !user.reset_token_expires_at ||
-            Date.now() > user.reset_token_expires_at
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "This password reset link has expired. Please request a new one."
-            });
-        }
-
-        // Hash the new password
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        // Save the new password and invalidate the reset token
-        db.prepare(`
-            UPDATE users
-            SET password = ?,
-                reset_token_hash = NULL,
-                reset_token_expires_at = NULL
-            WHERE id = ?
-        `).run(
-            hashedPassword,
-            user.id
-        );
-
-        return res.json({
-            success: true,
-            message: "Password reset successfully. You can now log in."
-        });
-
-    } catch (error) {
-        console.error("Reset password error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Something went wrong. Please try again."
-        });
-    }
-    // =========================
-// FUND WALLET - PAYSTACK
-// =========================
-
-app.post("/api/fund-wallet", async (req, res) => {
-    try {
-        const { userId, amount } = req.body;
-
-        const numericUserId = Number(userId);
-        const fundingAmount = Number(amount);
-
-        // Validate user ID
-        if (!Number.isInteger(numericUserId) || numericUserId <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid user account."
-            });
-        }
-
-        // Validate amount
-        if (
-            !Number.isInteger(fundingAmount) ||
-            fundingAmount < 100 ||
-            fundingAmount > 500000
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Funding amount must be between ₦100 and ₦500,000."
-            });
-        }
-
-        // Find the user from the database
-        const user = db.prepare(`
-            SELECT id, email
-            FROM users
-            WHERE id = ?
-        `).get(numericUserId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User account not found."
-            });
-        }
-
-        // Make sure Paystack secret key exists
-        if (!process.env.PAYSTACK_SECRET_KEY) {
-            console.error("PAYSTACK_SECRET_KEY is missing.");
+        } catch (error) {
+            console.error(
+                "FORGOT PASSWORD ERROR:",
+                error
+            );
 
             return res.status(500).json({
                 success: false,
-                message: "Payment system is not configured yet."
+                message:
+                    "Unable to process password reset."
             });
         }
+    }
+);
 
-        // Generate a unique reference
-        const reference =
-            `CD-${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
+/* =====================================================
+   RESET PASSWORD
+===================================================== */
 
-        // Paystack expects the amount in kobo
-        const amountInKobo = fundingAmount * 100;
+app.post(
+    "/api/reset-password",
+    async (req, res) => {
+        try {
+            const {
+                token,
+                password
+            } = req.body;
 
-        const paystackResponse = await fetch(
-            "https://api.paystack.co/transaction/initialize",
-            {
-                method: "POST",
-
-                headers: {
-                    "Authorization":
-                        `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    email: user.email,
-                    amount: String(amountInKobo),
-                    currency: "NGN",
-                    reference: reference,
-
-                    metadata: {
-                        user_id: String(user.id),
-                        purpose: "wallet_funding"
-                    }
-                })
+            if (!token || !password) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Token and new password are required."
+                });
             }
-        );
 
-        const paystackData = await paystackResponse.json();
+            if (String(password).length < 6) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Password must be at least 6 characters."
+                });
+            }
 
-        if (
-            !paystackResponse.ok ||
-            !paystackData.status ||
-            !paystackData.data
-        ) {
-            console.error(
-                "Paystack initialization failed:",
-                paystackData
+            const tokenHash =
+                crypto
+                    .createHash("sha256")
+                    .update(String(token))
+                    .digest("hex");
+
+            const user =
+                db.prepare(
+                    `
+                    SELECT id
+                    FROM users
+                    WHERE reset_token_hash = ?
+                    AND reset_token_expires_at > datetime('now')
+                    `
+                ).get(
+                    tokenHash
+                );
+
+            if (!user) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Reset token is invalid or expired."
+                });
+            }
+
+            const hashedPassword =
+                await bcrypt.hash(
+                    String(password),
+                    12
+                );
+
+            db.prepare(
+                `
+                UPDATE users
+                SET
+                    password = ?,
+                    reset_token_hash = NULL,
+                    reset_token_expires_at = NULL
+                WHERE id = ?
+                `
+            ).run(
+                hashedPassword,
+                user.id
             );
 
-            return res.status(400).json({
+            return res.json({
+                success: true,
+                message:
+                    "Password reset successfully."
+            });
+        } catch (error) {
+            console.error(
+                "RESET PASSWORD ERROR:",
+                error
+            );
+
+            return res.status(500).json({
                 success: false,
                 message:
-                    paystackData.message ||
+                    "Unable to reset password."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   PAYSTACK
+===================================================== */
+
+async function getPaystackSecretKey() {
+    return (
+        process.env.PAYSTACK_SECRET_KEY ||
+        ""
+    );
+}
+
+/* =====================================================
+   INITIALIZE WALLET FUNDING
+===================================================== */
+
+app.post(
+    "/api/paystack/initialize",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const amount =
+                Number(req.body.amount);
+
+            if (
+                !Number.isFinite(amount) ||
+                amount < 100
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Minimum wallet funding amount is ₦100."
+                });
+            }
+
+            const secretKey =
+                await getPaystackSecretKey();
+
+            if (!secretKey) {
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "Paystack is not configured yet."
+                });
+            }
+
+            const reference =
+                generateReference("FUND");
+
+            const response =
+                await fetch(
+                    "https://api.paystack.co/transaction/initialize",
+                    {
+                        method: "POST",
+                        headers: {
+                            Authorization:
+                                `Bearer ${secretKey}`,
+                            "Content-Type":
+                                "application/json"
+                        },
+                        body: JSON.stringify({
+                            email:
+                                req.authUser.email,
+                            amount:
+                                Math.round(
+                                    amount * 100
+                                ),
+                            reference,
+                            metadata: {
+                                user_id:
+                                    req.authUser.id
+                            }
+                        })
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (
+                !response.ok ||
+                !data.status
+            ) {
+                console.error(
+                    "PAYSTACK INITIALIZE ERROR:",
+                    data
+                );
+
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        data.message ||
+                        "Unable to initialize payment."
+                });
+            }
+
+            db.prepare(
+                `
+                INSERT INTO transactions
+                (
+                    user_id,
+                    type,
+                    amount,
+                    status,
+                    reference,
+                    description
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                `
+            ).run(
+                req.authUser.id,
+                "wallet_funding",
+                amount,
+                "pending",
+                reference,
+                "Paystack wallet funding"
+            );
+
+            return res.json({
+                success: true,
+                authorization_url:
+                    data.data.authorization_url,
+                access_code:
+                    data.data.access_code,
+                reference
+            });
+        } catch (error) {
+            console.error(
+                "PAYSTACK INITIALIZE ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
                     "Unable to initialize payment."
             });
         }
+    }
+);
 
-        return res.json({
-            success: true,
-            message: "Payment initialized successfully.",
-            authorization_url:
-                paystackData.data.authorization_url,
-            access_code:
-                paystackData.data.access_code,
-            reference:
-                paystackData.data.reference
+/* =====================================================
+   VERIFY PAYSTACK PAYMENT
+===================================================== */
+
+app.get(
+    "/api/paystack/verify/:reference",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const reference =
+                String(
+                    req.params.reference
+                );
+
+            const transaction =
+                db.prepare(
+                    `
+                    SELECT *
+                    FROM transactions
+                    WHERE reference = ?
+                    AND user_id = ?
+                    AND type = 'wallet_funding'
+                    `
+                ).get(
+                    reference,
+                    req.authUser.id
+                );
+
+            if (!transaction) {
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "Funding transaction not found."
+                });
+            }
+
+            if (
+                transaction.status ===
+                "successful"
+            ) {
+                const user =
+                    db.prepare(
+                        `
+                        SELECT balance
+                        FROM users
+                        WHERE id = ?
+                        `
+                    ).get(
+                        req.authUser.id
+                    );
+
+                return res.json({
+                    success: true,
+                    message:
+                        "Payment already verified.",
+                    balance:
+                        user.balance,
+                    reference
+                });
+            }
+
+            const secretKey =
+                await getPaystackSecretKey();
+
+            if (!secretKey) {
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "Paystack is not configured yet."
+                });
+            }
+
+            const response =
+                await fetch(
+                    `https://api.paystack.co/transaction/verify/${encodeURIComponent(
+                        reference
+                    )}`,
+                    {
+                        method: "GET",
+                        headers: {
+                            Authorization:
+                                `Bearer ${secretKey}`
+                        }
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (
+                !response.ok ||
+                !data.status
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        data.message ||
+                        "Payment verification failed."
+                });
+            }
+
+            const payment =
+                data.data;
+
+            if (
+                payment.status !==
+                "success"
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Payment was not successful."
+                });
+            }
+
+            const paidAmount =
+                Number(payment.amount) /
+                100;
+
+            if (
+                Math.abs(
+                    paidAmount -
+                        Number(
+                            transaction.amount
+                        )
+                ) > 0.01
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Payment amount does not match."
+                });
+            }
+
+            const completeFunding =
+                db.transaction(() => {
+                    const fresh =
+                        db.prepare(
+                            `
+                            SELECT status
+                            FROM transactions
+                            WHERE reference = ?
+                            `
+                        ).get(
+                            reference
+                        );
+
+                    if (
+                        fresh.status ===
+                        "successful"
+                    ) {
+                        return;
+                    }
+
+                    db.prepare(
+                        `
+                        UPDATE users
+                        SET balance =
+                            balance + ?
+                        WHERE id = ?
+                        `
+                    ).run(
+                        paidAmount,
+                        req.authUser.id
+                    );
+
+                    db.prepare(
+                        `
+                        UPDATE transactions
+                        SET status = 'successful'
+                        WHERE reference = ?
+                        `
+                    ).run(
+                        reference
+                    );
+                });
+
+            completeFunding();
+
+            const user =
+                db.prepare(
+                    `
+                    SELECT balance
+                    FROM users
+                    WHERE id = ?
+                    `
+                ).get(
+                    req.authUser.id
+                );
+
+            return res.json({
+                success: true,
+                message:
+                    "Wallet funded successfully.",
+                balance:
+                    user.balance,
+                reference
+            });
+        } catch (error) {
+            console.error(
+                "PAYSTACK VERIFY ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to verify payment."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   ADMIN - STATS
+===================================================== */
+
+app.get(
+    "/api/admin/stats",
+    requireAdmin,
+    (req, res) => {
+        try {
+            const users =
+                db.prepare(
+                    `
+                    SELECT COUNT(*) AS count
+                    FROM users
+                    `
+                ).get();
+
+            const transactions =
+                db.prepare(
+                    `
+                    SELECT COUNT(*) AS count
+                    FROM transactions
+                    `
+                ).get();
+
+            const successful =
+                db.prepare(
+                    `
+                    SELECT
+                        COALESCE(
+                            SUM(amount),
+                            0
+                        ) AS total
+                    FROM transactions
+                    WHERE status = 'successful'
+                    `
+                ).get();
+
+            const wallet =
+                db.prepare(
+                    `
+                    SELECT
+                        COALESCE(
+                            SUM(balance),
+                            0
+                        ) AS total
+                    FROM users
+                    `
+                ).get();
+
+            return res.json({
+                success: true,
+                stats: {
+                    users:
+                        users.count,
+                    transactions:
+                        transactions.count,
+                    successful_transaction_value:
+                        successful.total,
+                    total_wallet_balance:
+                        wallet.total
+                }
+            });
+        } catch (error) {
+            console.error(
+                "ADMIN STATS ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to load admin stats."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   ADMIN - USERS
+===================================================== */
+
+app.get(
+    "/api/admin/users",
+    requireAdmin,
+    (req, res) => {
+        try {
+            const users =
+                db.prepare(
+                    `
+                    SELECT
+                        id,
+                        name,
+                        email,
+                        phone,
+                        balance,
+                        virtual_account_number,
+                        virtual_bank_name,
+                        kyc_status,
+                        is_admin,
+                        created_at
+                    FROM users
+                    ORDER BY id DESC
+                    `
+                ).all();
+
+            return res.json({
+                success: true,
+                users
+            });
+        } catch (error) {
+            console.error(
+                "ADMIN USERS ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to load users."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   ADMIN - TRANSACTIONS
+===================================================== */
+
+app.get(
+    "/api/admin/transactions",
+    requireAdmin,
+    (req, res) => {
+        try {
+            const transactions =
+                db.prepare(
+                    `
+                    SELECT
+                        transactions.id,
+                        transactions.user_id,
+                        users.name,
+                        users.email,
+                        transactions.type,
+                        transactions.amount,
+                        transactions.status,
+                        transactions.reference,
+                        transactions.description,
+                        transactions.created_at
+                    FROM transactions
+                    LEFT JOIN users
+                        ON users.id =
+                           transactions.user_id
+                    ORDER BY
+                        transactions.id DESC
+                    `
+                ).all();
+
+            return res.json({
+                success: true,
+                transactions
+            });
+        } catch (error) {
+            console.error(
+                "ADMIN TRANSACTIONS ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to load transactions."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   ADMIN - DATA PLANS
+===================================================== */
+
+app.get(
+    "/api/admin/data-plans",
+    requireAdmin,
+    (req, res) => {
+        try {
+            const plans =
+                db.prepare(
+                    `
+                    SELECT *
+                    FROM data_plans
+                    ORDER BY
+                        CASE network
+                            WHEN 'MTN' THEN 1
+                            WHEN 'Airtel' THEN 2
+                            WHEN 'Glo' THEN 3
+                            WHEN '9mobile' THEN 4
+                            ELSE 5
+                        END,
+                        id ASC
+                    `
+                ).all();
+
+            return res.json({
+                success: true,
+                plans
+            });
+        } catch (error) {
+            console.error(
+                "ADMIN DATA PLANS ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to load data plans."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   ADMIN - UPDATE DATA PLAN PRICE
+===================================================== */
+
+app.put(
+    "/api/admin/data-plans/:id",
+    requireAdmin,
+    (req, res) => {
+        try {
+            const planId =
+                Number(req.params.id);
+
+            const {
+                selling_price,
+                provider_cost,
+                status
+            } = req.body;
+
+            if (
+                !Number.isInteger(
+                    planId
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid plan ID."
+                });
+            }
+
+            const currentPlan =
+                db.prepare(
+                    `
+                    SELECT *
+                    FROM data_plans
+                    WHERE id = ?
+                    `
+                ).get(planId);
+
+            if (!currentPlan) {
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "Data plan not found."
+                });
+            }
+
+            const newSellingPrice =
+                selling_price === undefined
+                    ? currentPlan.selling_price
+                    : Number(selling_price);
+
+            const newProviderCost =
+                provider_cost === undefined
+                    ? currentPlan.provider_cost
+                    : Number(provider_cost);
+
+            const newStatus =
+                status === undefined
+                    ? currentPlan.status
+                    : Number(status);
+
+            if (
+                !Number.isFinite(
+                    newSellingPrice
+                ) ||
+                newSellingPrice < 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid selling price."
+                });
+            }
+
+            if (
+                !Number.isFinite(
+                    newProviderCost
+                ) ||
+                newProviderCost < 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid provider cost."
+                });
+            }
+
+            db.prepare(
+                `
+                UPDATE data_plans
+                SET
+                    provider_cost = ?,
+                    selling_price = ?,
+                    status = ?
+                WHERE id = ?
+                `
+            ).run(
+                newProviderCost,
+                newSellingPrice,
+                newStatus ? 1 : 0,
+                planId
+            );
+
+            const updatedPlan =
+                db.prepare(
+                    `
+                    SELECT *
+                    FROM data_plans
+                    WHERE id = ?
+                    `
+                ).get(planId);
+
+            return res.json({
+                success: true,
+                message:
+                    "Data plan updated successfully.",
+                plan: updatedPlan
+            });
+        } catch (error) {
+            console.error(
+                "UPDATE DATA PLAN ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to update data plan."
+            });
+        }
+    }
+);
+
+/* =====================================================
+   404 API HANDLER
+===================================================== */
+
+app.use(
+    "/api",
+    (req, res) => {
+        return res.status(404).json({
+            success: false,
+            message:
+                "API endpoint not found."
         });
+    }
+);
 
-    } catch (error) {
+/* =====================================================
+   SERVER ERROR HANDLER
+===================================================== */
 
+app.use(
+    (error, req, res, next) => {
         console.error(
-            "Fund wallet error:",
+            "SERVER ERROR:",
             error
         );
+
+        if (res.headersSent) {
+            return next(error);
+        }
 
         return res.status(500).json({
             success: false,
             message:
-                "Unable to initialize payment. Please try again."
+                "An unexpected server error occurred."
         });
     }
-});
-});
+);
+
+/* =====================================================
+   START SERVER
+===================================================== */
+
 app.listen(PORT, () => {
+    console.log("");
     console.log(
-        `CheapData is running at http://localhost:${PORT}`
+        "=========================================="
     );
+    console.log(
+        "       CHEAPDATA SERVER RUNNING"
+    );
+    console.log(
+        "=========================================="
+    );
+    console.log(
+        `Local: http://localhost:${PORT}`
+    );
+    console.log(
+        "Database: cheapdata.db"
+    );
+    console.log(
+        "=========================================="
+    );
+    console.log("");
 });

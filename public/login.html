@@ -1,337 +1,343 @@
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | CheapData</title>
 
-```
-<style>
-    * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-        font-family: Arial, sans-serif;
-    }
+    <title>Login - CheapData</title>
 
-    body {
-        min-height: 100vh;
-        background: #f5f7fb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        color: #172033;
-    }
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    .container {
-        width: 100%;
-        max-width: 450px;
-    }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f7fb;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
 
-    .logo {
-        text-align: center;
-        font-size: 30px;
-        font-weight: bold;
-        color: #176b3a;
-        margin-bottom: 25px;
-    }
+        header {
+            background: white;
+            padding: 18px 7%;
+            border-bottom: 1px solid #e5e7eb;
+        }
 
-    .card {
-        background: white;
-        padding: 35px;
-        border-radius: 18px;
-        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.08);
-    }
+        .logo {
+            color: #16a34a;
+            font-size: 25px;
+            font-weight: bold;
+            text-decoration: none;
+        }
 
-    h1 {
-        text-align: center;
-        margin-bottom: 10px;
-    }
+        .container {
+            width: 100%;
+            max-width: 450px;
+            margin: 60px auto;
+            padding: 0 20px;
+        }
 
-    .subtitle {
-        text-align: center;
-        color: #667085;
-        margin-bottom: 30px;
-    }
+        .login-card {
+            background: white;
+            padding: 35px;
+            border-radius: 14px;
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+        }
 
-    .form-group {
-        margin-bottom: 20px;
-    }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #111827;
+        }
 
-    label {
-        display: block;
-        font-weight: bold;
-        margin-bottom: 8px;
-    }
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 30px;
+        }
 
-    input {
-        width: 100%;
-        padding: 14px;
-        border: 1px solid #d0d5dd;
-        border-radius: 8px;
-        font-size: 16px;
-        outline: none;
-    }
+        label {
+            display: block;
+            margin-bottom: 7px;
+            font-weight: bold;
+            color: #374151;
+        }
 
-    input:focus {
-        border-color: #176b3a;
-    }
+        input {
+            width: 100%;
+            padding: 13px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 15px;
+            outline: none;
+            margin-bottom: 16px;
+        }
 
-    .login-btn {
-        width: 100%;
-        padding: 15px;
-        border: none;
-        border-radius: 8px;
-        background: #176b3a;
-        color: white;
-        font-size: 17px;
-        font-weight: bold;
-        cursor: pointer;
-    }
+        input:focus {
+            border-color: #16a34a;
+        }
 
-    .login-btn:hover {
-        opacity: 0.9;
-    }
+        .password-container {
+            position: relative;
+        }
 
-    .login-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
+        .password-container input {
+            margin-bottom: 0;
+        }
 
-    .message {
-        display: none;
-        padding: 12px;
-        border-radius: 8px;
-        margin-bottom: 18px;
-        text-align: center;
-    }
+        .forgot-password {
+            display: block;
+            text-align: right;
+            margin-top: 8px;
+            margin-bottom: 20px;
+            color: #16a34a;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: bold;
+        }
 
-    .register-link {
-        text-align: center;
-        margin-top: 22px;
-        color: #667085;
-    }
+        .forgot-password:hover {
+            text-decoration: underline;
+        }
 
-    .register-link a {
-        color: #176b3a;
-        text-decoration: none;
-        font-weight: bold;
-    }
+        button {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            background: #16a34a;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
 
-    .back-home {
-        display: block;
-        text-align: center;
-        margin-top: 20px;
-        color: #172033;
-        text-decoration: none;
-    }
-</style>
-```
+        button:hover {
+            background: #15803d;
+        }
 
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .register-text {
+            text-align: center;
+            margin-top: 25px;
+            color: #6b7280;
+        }
+
+        .register-text a {
+            color: #16a34a;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .register-text a:hover {
+            text-decoration: underline;
+        }
+
+        .back-home {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #6b7280;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-home:hover {
+            color: #16a34a;
+        }
+
+        footer {
+            margin-top: auto;
+            background: #111827;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            font-size: 14px;
+        }
+
+        @media (max-width: 500px) {
+            .container {
+                margin: 35px auto;
+            }
+
+            .login-card {
+                padding: 25px 20px;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
-<div class="container">
+    <header>
+        <a href="/" class="logo">CheapData</a>
+    </header>
 
-```
-<div class="logo">
-    CheapData
-</div>
+    <div class="container">
 
-<div class="card">
+        <div class="login-card">
 
-    <h1>Welcome Back</h1>
+            <h1>Welcome Back</h1>
 
-    <p class="subtitle">
-        Login to your CheapData account
-    </p>
+            <p class="subtitle">
+                Login to your CheapData account
+            </p>
 
-    <div id="message" class="message"></div>
+            <form id="loginForm">
 
-    <form id="loginForm">
+                <label for="email">
+                    Email Address
+                </label>
 
-        <div class="form-group">
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="Enter your email"
+                    required
+                >
 
-            <label for="email">
-                Email Address
-            </label>
+                <label for="password">
+                    Password
+                </label>
 
-            <input
-                type="email"
-                id="email"
-                placeholder="Enter your email"
-                required>
+                <div class="password-container">
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        placeholder="Enter your password"
+                        required
+                    >
+                </div>
+
+                <a
+                    href="/forgot-password.html"
+                    class="forgot-password"
+                >
+                    Forgot Password?
+                </a>
+
+                <button type="submit" id="loginButton">
+                    Login
+                </button>
+
+                <div id="message" class="message"></div>
+
+            </form>
+
+            <p class="register-text">
+                Don't have an account?
+                <a href="/register.html">
+                    Create Account
+                </a>
+            </p>
+
+            <a href="/" class="back-home">
+                ← Back to Homepage
+            </a>
 
         </div>
-
-        <div class="form-group">
-
-            <label for="password">
-                Password
-            </label>
-
-            <input
-                type="password"
-                id="password"
-                placeholder="Enter your password"
-                required>
-
-        </div>
-
-        <button
-            type="submit"
-            class="login-btn"
-            id="loginButton">
-
-            Login
-
-        </button>
-
-    </form>
-
-    <div class="register-link">
-
-        Don't have an account?
-
-        <a href="/register.html">
-            Create Account
-        </a>
 
     </div>
 
-</div>
+    <footer>
+        © 2026 CheapData. All rights reserved.
+    </footer>
 
-<a href="/" class="back-home">
-    ← Back to Homepage
-</a>
-```
+    <script>
+        const loginForm = document.getElementById("loginForm");
+        const loginButton = document.getElementById("loginButton");
+        const message = document.getElementById("message");
 
-</div>
+        loginForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
 
-<script>
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value;
 
-const form = document.getElementById("loginForm");
-const message = document.getElementById("message");
-const button = document.getElementById("loginButton");
+            message.style.display = "none";
+            message.className = "message";
 
+            loginButton.disabled = true;
+            loginButton.textContent = "Logging in...";
 
-form.addEventListener("submit", async function(event) {
+            try {
+                const response = await fetch("/api/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        email,
+                        password
+                    })
+                });
 
-    event.preventDefault();
+                const data = await response.json();
 
-    const email =
-        document.getElementById("email").value.trim();
+                if (!response.ok || !data.success) {
+                    throw new Error(
+                        data.message || "Login failed."
+                    );
+                }
 
-    const password =
-        document.getElementById("password").value;
+                localStorage.setItem(
+                    "cheapdataUser",
+                    JSON.stringify(data.user)
+                );
 
+                message.textContent = "Login successful!";
+                message.classList.add("success");
+                message.style.display = "block";
 
-    button.disabled = true;
-    button.textContent = "Logging in...";
+                setTimeout(() => {
+                    window.location.href = "/dashboard.html";
+                }, 700);
 
+            } catch (error) {
 
-    try {
+                message.textContent =
+                    error.message ||
+                    "Unable to login. Please try again.";
 
-        const response = await fetch("/api/login", {
+                message.classList.add("error");
+                message.style.display = "block";
 
-            method: "POST",
+            } finally {
 
-            headers: {
-                "Content-Type": "application/json"
-            },
-
-            body: JSON.stringify({
-                email: email,
-                password: password
-            })
-
+                loginButton.disabled = false;
+                loginButton.textContent = "Login";
+            }
         });
-
-
-        const data = await response.json();
-
-
-        if (!response.ok) {
-
-            showMessage(
-                data.message || "Login failed.",
-                "error"
-            );
-
-            button.disabled = false;
-            button.textContent = "Login";
-
-            return;
-        }
-
-
-        // Store logged-in user
-        localStorage.setItem(
-            "cheapdataUser",
-            JSON.stringify(data.user)
-        );
-
-
-        showMessage(
-            "Login successful! 🎉",
-            "success"
-        );
-
-
-        button.textContent = "Success!";
-
-
-        // Go to dashboard
-        setTimeout(function() {
-
-            window.location.href = "/dashboard.html";
-
-        }, 1000);
-
-
-    } catch (error) {
-
-        console.error("Login error:", error);
-
-        showMessage(
-            "Unable to connect to the server.",
-            "error"
-        );
-
-        button.disabled = false;
-        button.textContent = "Login";
-
-    }
-
-});
-
-
-function showMessage(text, type) {
-
-    message.textContent = text;
-    message.style.display = "block";
-
-
-    if (type === "error") {
-
-        message.style.background = "#fee4e2";
-        message.style.color = "#b42318";
-
-    } else {
-
-        message.style.background = "#eef8f2";
-        message.style.color = "#176b3a";
-
-    }
-
-}
-
-</script>
+    </script>
 
 </body>
-
 </html>
