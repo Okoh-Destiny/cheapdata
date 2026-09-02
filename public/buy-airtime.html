@@ -1,108 +1,68 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Buy Airtime | CheapData</title>
+    <title>Buy Airtime - CheapData</title>
 
     <style>
+
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
             font-family: Arial, sans-serif;
         }
 
         body {
             background: #f5f7fb;
-            color: #172033;
+            color: #111827;
         }
 
-        /* NAVIGATION */
-        nav {
-            background: white;
-            padding: 20px 7%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        header {
+            background: #0b7a3b;
+            color: white;
+            padding: 18px 20px;
         }
 
-        .logo {
-            font-size: 26px;
-            font-weight: bold;
-            color: #176b3a;
+        header h1 {
+            font-size: 24px;
         }
 
-        nav a {
-            text-decoration: none;
-            color: #172033;
-            font-weight: 500;
-        }
-
-        /* MAIN */
         .container {
             max-width: 700px;
-            margin: 50px auto;
-            padding: 0 20px;
+            margin: 30px auto;
+            padding: 20px;
         }
 
-        .heading {
-            text-align: center;
-            margin-bottom: 35px;
-        }
-
-        .heading h1 {
-            font-size: 40px;
-            margin-bottom: 10px;
-        }
-
-        .heading p {
-            color: #667085;
-        }
-
-        /* BOX */
-        .box {
-            background: white;
-            padding: 30px;
-            border-radius: 18px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
-            margin-bottom: 25px;
-        }
-
-        .box h2 {
+        .back {
+            display: inline-block;
             margin-bottom: 20px;
-        }
-
-        /* NETWORK */
-        .networks {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-        }
-
-        .network-btn {
-            padding: 15px 8px;
-            border: 2px solid #e5e7eb;
-            background: white;
-            border-radius: 10px;
-            cursor: pointer;
+            color: #0b7a3b;
+            text-decoration: none;
             font-weight: bold;
-            transition: 0.2s;
         }
 
-        .network-btn:hover,
-        .network-btn.active {
-            border-color: #176b3a;
-            background: #eef8f2;
-            color: #176b3a;
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
         }
 
-        /* FORM */
-        .form-group {
+        h2 {
             margin-bottom: 20px;
+        }
+
+        .balance {
+            background: #e8f7ee;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            color: #0b7a3b;
+            font-weight: bold;
         }
 
         label {
@@ -113,346 +73,905 @@
 
         input {
             width: 100%;
-            padding: 15px;
-            border: 1px solid #d0d5dd;
+            padding: 14px;
+            border: 1px solid #d1d5db;
             border-radius: 8px;
+            margin-bottom: 20px;
             font-size: 16px;
             outline: none;
         }
 
         input:focus {
-            border-color: #176b3a;
+            border-color: #0b7a3b;
         }
 
-        .amount-info {
-            color: #667085;
-            font-size: 14px;
-            margin-top: 8px;
+        .pin-input {
+            letter-spacing: 8px;
+            text-align: center;
+            font-weight: bold;
         }
 
-        /* SUMMARY */
-        .summary {
-            background: #eef8f2;
-            border-radius: 10px;
-            padding: 18px;
+        .pin-note {
+            color: #6b7280;
+            font-size: 13px;
+            margin-top: -12px;
             margin-bottom: 20px;
-            display: none;
+        }
+
+        .networks {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .network {
+            padding: 13px 5px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .network:hover {
+            border-color: #0b7a3b;
+        }
+
+        .network.active {
+            border-color: #0b7a3b;
+            background: #e8f7ee;
+            color: #0b7a3b;
+        }
+
+        .quick-amounts {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .amount-btn {
+            padding: 12px 5px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .amount-btn:hover {
+            border-color: #0b7a3b;
+        }
+
+        .summary {
+            background: #f3f4f6;
+            padding: 18px;
+            border-radius: 10px;
+            margin-top: 10px;
+            line-height: 1.9;
         }
 
         .summary-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
+            gap: 20px;
         }
 
-        .summary-row:last-child {
-            margin-bottom: 0;
+        .summary-row strong {
+            color: #0b7a3b;
         }
 
-        .summary-price {
-            font-size: 20px;
-            font-weight: bold;
-            color: #176b3a;
-        }
-
-        /* BUTTON */
         .buy-btn {
             width: 100%;
-            padding: 16px;
+            margin-top: 20px;
+            padding: 15px;
             border: none;
-            border-radius: 8px;
-            background: #176b3a;
+            border-radius: 10px;
+            background: #0b7a3b;
             color: white;
             font-size: 17px;
+            font-weight: bold;
             cursor: pointer;
         }
 
         .buy-btn:hover {
-            opacity: 0.9;
+            background: #096b34;
         }
 
-        /* MOBILE */
+        .buy-btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+            line-height: 1.6;
+        }
+
+        .success {
+            display: block;
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .error {
+            display: block;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
         @media (max-width: 600px) {
 
             .networks {
                 grid-template-columns: repeat(2, 1fr);
             }
 
-            .heading h1 {
-                font-size: 32px;
+            .quick-amounts {
+                grid-template-columns: repeat(2, 1fr);
             }
 
-            .box {
-                padding: 20px;
-            }
         }
+
     </style>
 </head>
 
 <body>
 
-    <!-- NAVIGATION -->
-    <nav>
+<header>
+    <h1>CheapData</h1>
+</header>
 
-        <div class="logo">
-            CheapData
+<div class="container">
+
+    <a href="/dashboard.html" class="back">
+        ← Back to Dashboard
+    </a>
+
+    <div class="card">
+
+        <h2>Buy Airtime</h2>
+
+        <div class="balance">
+            Wallet Balance:
+            <span id="balance">₦0</span>
         </div>
-
-        <a href="/">
-            ← Back Home
-        </a>
-
-    </nav>
-
-
-    <!-- MAIN CONTENT -->
-    <main class="container">
-
-        <div class="heading">
-
-            <h1>Buy Airtime</h1>
-
-            <p>
-                Recharge your phone quickly and conveniently.
-            </p>
-
-        </div>
-
-
-        <!-- NETWORK -->
-        <div class="box">
-
-            <h2>1. Select Network</h2>
-
-            <div class="networks">
-
-                <button
-                    class="network-btn"
-                    onclick="selectNetwork(this, 'MTN')">
-                    MTN
-                </button>
-
-                <button
-                    class="network-btn"
-                    onclick="selectNetwork(this, 'Airtel')">
-                    Airtel
-                </button>
-
-                <button
-                    class="network-btn"
-                    onclick="selectNetwork(this, 'Glo')">
-                    Glo
-                </button>
-
-                <button
-                    class="network-btn"
-                    onclick="selectNetwork(this, '9mobile')">
-                    9mobile
-                </button>
-
-            </div>
-
-        </div>
-
 
         <!-- PHONE NUMBER -->
-        <div class="box">
 
-            <h2>2. Enter Details</h2>
+        <label>
+            Phone Number
+        </label>
 
-            <div class="form-group">
+        <input
+            type="tel"
+            id="phone"
+            placeholder="08012345678"
+            maxlength="11"
+            inputmode="numeric"
+        >
 
-                <label for="phone">
-                    Phone Number
-                </label>
+        <!-- NETWORK -->
 
-                <input
-                    type="tel"
-                    id="phone"
-                    placeholder="08012345678"
-                    maxlength="11"
-                    oninput="updateSummary()">
+        <label>
+            Select Network
+        </label>
 
-            </div>
-
-
-            <div class="form-group">
-
-                <label for="amount">
-                    Airtime Amount
-                </label>
-
-                <input
-                    type="number"
-                    id="amount"
-                    placeholder="Enter amount"
-                    min="50"
-                    max="50000"
-                    oninput="updateSummary()">
-
-                <p class="amount-info">
-                    Minimum ₦50 — Maximum ₦50,000
-                </p>
-
-            </div>
-
-
-            <!-- SUMMARY -->
-            <div
-                class="summary"
-                id="summary">
-
-                <div class="summary-row">
-
-                    <span>Network</span>
-
-                    <strong id="summaryNetwork">
-                        —
-                    </strong>
-
-                </div>
-
-                <div class="summary-row">
-
-                    <span>Phone</span>
-
-                    <strong id="summaryPhone">
-                        —
-                    </strong>
-
-                </div>
-
-                <div class="summary-row">
-
-                    <span>Amount</span>
-
-                    <strong
-                        class="summary-price"
-                        id="summaryAmount">
-                        ₦0
-                    </strong>
-
-                </div>
-
-            </div>
-
+        <div class="networks">
 
             <button
-                class="buy-btn"
-                onclick="buyAirtime()">
+                type="button"
+                class="network active"
+                onclick="selectNetwork('MTN', this)"
+            >
+                MTN
+            </button>
 
-                Continue
+            <button
+                type="button"
+                class="network"
+                onclick="selectNetwork('Airtel', this)"
+            >
+                Airtel
+            </button>
 
+            <button
+                type="button"
+                class="network"
+                onclick="selectNetwork('Glo', this)"
+            >
+                Glo
+            </button>
+
+            <button
+                type="button"
+                class="network"
+                onclick="selectNetwork('9mobile', this)"
+            >
+                9mobile
             </button>
 
         </div>
 
-    </main>
+        <!-- AIRTIME AMOUNT -->
+
+        <label>
+            Airtime Amount
+        </label>
+
+        <input
+            type="number"
+            id="amount"
+            placeholder="Enter amount"
+            min="50"
+            max="50000"
+            oninput="updateSummary()"
+        >
+
+        <!-- QUICK AMOUNTS -->
+
+        <div class="quick-amounts">
+
+            <button
+                type="button"
+                class="amount-btn"
+                onclick="setAmount(100)"
+            >
+                ₦100
+            </button>
+
+            <button
+                type="button"
+                class="amount-btn"
+                onclick="setAmount(200)"
+            >
+                ₦200
+            </button>
+
+            <button
+                type="button"
+                class="amount-btn"
+                onclick="setAmount(500)"
+            >
+                ₦500
+            </button>
+
+            <button
+                type="button"
+                class="amount-btn"
+                onclick="setAmount(1000)"
+            >
+                ₦1,000
+            </button>
+
+        </div>
+
+        <!-- PURCHASE PIN -->
+
+        <label>
+            Purchase PIN
+        </label>
+
+        <input
+            type="password"
+            id="purchasePin"
+            class="pin-input"
+            placeholder="••••"
+            maxlength="4"
+            inputmode="numeric"
+            autocomplete="off"
+        >
+
+        <div class="pin-note">
+            Enter your 4-digit Purchase PIN to authorize this purchase.
+        </div>
+
+        <!-- SUMMARY -->
+
+        <div class="summary">
+
+            <strong>Order Summary</strong>
+
+            <div class="summary-row">
+                <span>Network:</span>
+
+                <strong id="summaryNetwork">
+                    MTN
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Phone:</span>
+
+                <strong id="summaryPhone">
+                    Not entered
+                </strong>
+            </div>
+
+            <div class="summary-row">
+                <span>Amount:</span>
+
+                <strong id="summaryAmount">
+                    ₦0
+                </strong>
+            </div>
+
+        </div>
+
+        <!-- BUY BUTTON -->
+
+        <button
+            type="button"
+            id="buyButton"
+            class="buy-btn"
+            onclick="purchaseAirtime()"
+            disabled
+        >
+            Enter Airtime Amount
+        </button>
+
+        <!-- MESSAGE -->
+
+        <div
+            id="message"
+            class="message"
+        ></div>
+
+    </div>
+
+</div>
+
+<script>
+
+    // =========================
+    // LOGIN CHECK
+    // =========================
+
+    const savedUser =
+        localStorage.getItem("cheapdataUser");
+
+    if (!savedUser) {
+
+        window.location.href =
+            "/login.html";
+
+    }
+
+    let user;
+
+    try {
+
+        user =
+            JSON.parse(savedUser);
+
+    } catch (error) {
+
+        localStorage.removeItem(
+            "cheapdataUser"
+        );
+
+        window.location.href =
+            "/login.html";
+
+    }
 
 
-    <script>
+    // =========================
+    // VARIABLES
+    // =========================
 
-        let selectedNetwork = "";
-
-
-        // SELECT NETWORK
-        function selectNetwork(button, network) {
-
-            document
-                .querySelectorAll(".network-btn")
-                .forEach(btn => {
-                    btn.classList.remove("active");
-                });
-
-            button.classList.add("active");
-
-            selectedNetwork = network;
-
-            updateSummary();
-        }
+    let selectedNetwork = "MTN";
 
 
-        // UPDATE SUMMARY
-        function updateSummary() {
+    // =========================
+    // LOAD BALANCE
+    // =========================
 
-            const phone =
-                document.getElementById("phone").value;
+    async function loadBalance() {
 
-            const amount =
-                document.getElementById("amount").value;
+        try {
 
-            document.getElementById("summaryNetwork")
-                .textContent =
-                selectedNetwork || "—";
-
-            document.getElementById("summaryPhone")
-                .textContent =
-                phone || "—";
-
-            document.getElementById("summaryAmount")
-                .textContent =
-                amount
-                    ? `₦${Number(amount).toLocaleString()}`
-                    : "₦0";
-
-
-            if (selectedNetwork || phone || amount) {
-
-                document.getElementById("summary")
-                    .style.display = "block";
-
-            }
-
-        }
-
-
-        // BUY AIRTIME
-        function buyAirtime() {
-
-            const phone =
-                document.getElementById("phone").value.trim();
-
-            const amount =
-                Number(document.getElementById("amount").value);
-
-
-            if (!selectedNetwork) {
-
-                alert("Please select a network.");
-
-                return;
-            }
-
-
-            if (!/^0[789][01][0-9]{8}$/.test(phone)) {
-
-                alert("Please enter a valid Nigerian phone number.");
-
-                return;
-            }
-
-
-            if (!amount || amount < 50 || amount > 50000) {
-
-                alert(
-                    "Airtime amount must be between ₦50 and ₦50,000."
+            const response =
+                await fetch(
+                    `/api/user/${user.id}`
                 );
 
-                return;
+            const data =
+                await response.json();
+
+            if (data.success) {
+
+                user =
+                    data.user;
+
+                localStorage.setItem(
+                    "cheapdataUser",
+                    JSON.stringify(user)
+                );
+
+                document
+                    .getElementById("balance")
+                    .textContent =
+                    `₦${Number(user.balance).toLocaleString()}`;
+
             }
 
+        } catch (error) {
 
-            alert(
-                `Order ready!\n\n` +
-                `Network: ${selectedNetwork}\n` +
-                `Phone: ${phone}\n` +
-                `Amount: ₦${amount.toLocaleString()}`
+            console.error(
+                "Balance error:",
+                error
             );
 
         }
 
-    </script>
+    }
+
+    loadBalance();
+
+
+    // =========================
+    // SELECT NETWORK
+    // =========================
+
+    function selectNetwork(
+        network,
+        button
+    ) {
+
+        selectedNetwork =
+            network;
+
+        document
+            .querySelectorAll(".network")
+            .forEach(btn => {
+
+                btn.classList.remove(
+                    "active"
+                );
+
+            });
+
+        button.classList.add(
+            "active"
+        );
+
+        document
+            .getElementById(
+                "summaryNetwork"
+            )
+            .textContent =
+            network;
+
+    }
+
+
+    // =========================
+    // SET QUICK AMOUNT
+    // =========================
+
+    function setAmount(amount) {
+
+        document
+            .getElementById("amount")
+            .value =
+            amount;
+
+        updateSummary();
+
+    }
+
+
+    // =========================
+    // PHONE SUMMARY
+    // =========================
+
+    document
+        .getElementById("phone")
+        .addEventListener(
+            "input",
+            updateSummary
+        );
+
+
+    // =========================
+    // UPDATE SUMMARY
+    // =========================
+
+    function updateSummary() {
+
+        const phone =
+            document
+                .getElementById("phone")
+                .value;
+
+        const amount =
+            Number(
+                document
+                    .getElementById("amount")
+                    .value
+            );
+
+        document
+            .getElementById(
+                "summaryPhone"
+            )
+            .textContent =
+            phone ||
+            "Not entered";
+
+        document
+            .getElementById(
+                "summaryAmount"
+            )
+            .textContent =
+            amount
+                ? `₦${amount.toLocaleString()}`
+                : "₦0";
+
+        const buyButton =
+            document.getElementById(
+                "buyButton"
+            );
+
+        if (
+            amount >= 50 &&
+            amount <= 50000
+        ) {
+
+            buyButton.disabled =
+                false;
+
+            buyButton.textContent =
+                `Buy Airtime for ₦${amount.toLocaleString()}`;
+
+        } else {
+
+            buyButton.disabled =
+                true;
+
+            buyButton.textContent =
+                "Enter Airtime Amount";
+
+        }
+
+    }
+
+
+    // =========================
+    // PURCHASE PIN INPUT
+    // =========================
+
+    document
+        .getElementById("purchasePin")
+        .addEventListener(
+            "input",
+            function () {
+
+                this.value =
+                    this.value
+                        .replace(/\D/g, "")
+                        .slice(0, 4);
+
+            }
+        );
+
+
+    // =========================
+    // SHOW MESSAGE
+    // =========================
+
+    function showMessage(
+        text,
+        type
+    ) {
+
+        const message =
+            document.getElementById(
+                "message"
+            );
+
+        message.textContent =
+            text;
+
+        message.className =
+            `message ${type}`;
+
+        message.style.display =
+            "block";
+
+    }
+
+
+    // =========================
+    // PURCHASE AIRTIME
+    // =========================
+
+    async function purchaseAirtime() {
+
+        const phone =
+            document
+                .getElementById("phone")
+                .value
+                .trim();
+
+        const amount =
+            Number(
+                document
+                    .getElementById("amount")
+                    .value
+            );
+
+        const pin =
+            document
+                .getElementById(
+                    "purchasePin"
+                )
+                .value
+                .trim();
+
+        const buyButton =
+            document.getElementById(
+                "buyButton"
+            );
+
+        const message =
+            document.getElementById(
+                "message"
+            );
+
+
+        // Clear previous message
+
+        message.className =
+            "message";
+
+        message.style.display =
+            "none";
+
+
+        // =========================
+        // VALIDATE PHONE
+        // =========================
+
+        if (
+            !/^0[7-9][0-1][0-9]{8}$/.test(
+                phone
+            )
+        ) {
+
+            showMessage(
+                "Please enter a valid Nigerian phone number.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // =========================
+        // VALIDATE AMOUNT
+        // =========================
+
+        if (
+            !Number.isFinite(amount) ||
+            amount < 50 ||
+            amount > 50000
+        ) {
+
+            showMessage(
+                "Airtime amount must be between ₦50 and ₦50,000.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // =========================
+        // VALIDATE PIN
+        // =========================
+
+        if (
+            !/^\d{4}$/.test(pin)
+        ) {
+
+            showMessage(
+                "Please enter your 4-digit Purchase PIN.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // =========================
+        // CHECK BALANCE
+        // =========================
+
+        if (
+            Number(user.balance) <
+            amount
+        ) {
+
+            showMessage(
+                "Insufficient wallet balance.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // =========================
+        // CONFIRM PURCHASE
+        // =========================
+
+        const confirmed =
+            confirm(
+                `Buy ₦${amount.toLocaleString()} ${selectedNetwork} airtime for ${phone}?`
+            );
+
+        if (!confirmed) {
+
+            return;
+
+        }
+
+
+        // =========================
+        // PROCESSING
+        // =========================
+
+        buyButton.disabled =
+            true;
+
+        buyButton.textContent =
+            "Processing...";
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/purchase-airtime",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            userId:
+                                user.id,
+
+                            network:
+                                selectedNetwork,
+
+                            phone:
+                                phone,
+
+                            amount:
+                                amount,
+
+                            pin:
+                                pin
+
+                        })
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            // =========================
+            // SERVER ERROR
+            // =========================
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+
+                showMessage(
+                    data.message ||
+                    "Airtime purchase failed.",
+                    "error"
+                );
+
+                buyButton.disabled =
+                    false;
+
+                buyButton.textContent =
+                    `Buy Airtime for ₦${amount.toLocaleString()}`;
+
+                return;
+
+            }
+
+
+            // =========================
+            // UPDATE BALANCE
+            // =========================
+
+            user.balance =
+                data.balance;
+
+            localStorage.setItem(
+                "cheapdataUser",
+                JSON.stringify(user)
+            );
+
+
+            document
+                .getElementById(
+                    "balance"
+                )
+                .textContent =
+                `₦${Number(data.balance).toLocaleString()}`;
+
+
+            // =========================
+            // SUCCESS MESSAGE
+            // =========================
+
+            showMessage(
+                `Airtime purchase successful! ${data.network} airtime of ₦${Number(data.amount).toLocaleString()} sent to ${data.phone}. Reference: ${data.reference}`,
+                "success"
+            );
+
+
+            buyButton.textContent =
+                "Purchase Successful";
+
+
+            // Clear PIN
+
+            document
+                .getElementById(
+                    "purchasePin"
+                )
+                .value = "";
+
+
+        } catch (error) {
+
+            console.error(
+                "Airtime error:",
+                error
+            );
+
+
+            showMessage(
+                "Unable to connect to the server. Please try again.",
+                "error"
+            );
+
+
+            buyButton.disabled =
+                false;
+
+            buyButton.textContent =
+                `Buy Airtime for ₦${amount.toLocaleString()}`;
+
+        }
+
+    }
+
+</script>
 
 </body>
-
 </html>
+```

@@ -1,152 +1,58 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Buy Data | CheapData</title>
+    <title>Buy Data - CheapData</title>
 
     <style>
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
             font-family: Arial, sans-serif;
         }
 
         body {
             background: #f5f7fb;
-            color: #172033;
+            color: #111827;
         }
 
-        /* NAVIGATION */
-        nav {
-            background: white;
-            padding: 20px 7%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        header {
+            background: #0b7a3b;
+            color: white;
+            padding: 18px 20px;
         }
 
-        .logo {
-            font-size: 26px;
-            font-weight: bold;
-            color: #176b3a;
+        header h1 {
+            font-size: 24px;
         }
 
-        nav a {
-            text-decoration: none;
-            color: #172033;
-            font-weight: 500;
-        }
-
-        /* MAIN CONTAINER */
         .container {
-            max-width: 900px;
-            margin: 50px auto;
-            padding: 0 20px;
-        }
-
-        /* HEADING */
-        .heading {
-            text-align: center;
-            margin-bottom: 35px;
-        }
-
-        .heading h1 {
-            font-size: 40px;
-            margin-bottom: 10px;
-        }
-
-        .heading p {
-            color: #667085;
-        }
-
-        /* BOX */
-        .box {
-            background: white;
-            padding: 30px;
-            border-radius: 18px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
-            margin-bottom: 25px;
-        }
-
-        .box h2 {
-            margin-bottom: 20px;
-        }
-
-        /* NETWORKS */
-        .networks {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-        }
-
-        .network-btn {
-            padding: 15px;
-            border: 2px solid #e5e7eb;
-            background: white;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 15px;
-            transition: 0.2s;
-        }
-
-        .network-btn:hover,
-        .network-btn.active {
-            border-color: #176b3a;
-            background: #eef8f2;
-            color: #176b3a;
-        }
-
-        /* DATA PLANS */
-        .plans {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-        }
-
-        .plan {
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
+            max-width: 700px;
+            margin: 30px auto;
             padding: 20px;
-            cursor: pointer;
+        }
+
+        .card {
             background: white;
-            transition: 0.2s;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
         }
 
-        .plan:hover {
-            border-color: #176b3a;
-            transform: translateY(-2px);
-        }
-
-        .plan.selected {
-            border-color: #176b3a;
-            background: #eef8f2;
-        }
-
-        .plan h3 {
-            margin-bottom: 8px;
-        }
-
-        .plan p {
-            color: #667085;
-            margin-bottom: 15px;
-            font-size: 14px;
-        }
-
-        .price {
-            font-size: 21px;
-            font-weight: bold;
-            color: #176b3a;
-        }
-
-        /* FORM */
-        .form-group {
+        h2 {
             margin-bottom: 20px;
+        }
+
+        .balance {
+            background: #e8f7ee;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            color: #0b7a3b;
+            font-weight: bold;
         }
 
         label {
@@ -157,63 +63,148 @@
 
         input {
             width: 100%;
-            padding: 14px;
-            border: 1px solid #d0d5dd;
+            padding: 13px;
+            border: 1px solid #d1d5db;
             border-radius: 8px;
+            margin-bottom: 20px;
             font-size: 16px;
-            outline: none;
         }
 
-        input:focus {
-            border-color: #176b3a;
+        .pin-input {
+            letter-spacing: 8px;
+            text-align: center;
+            font-weight: bold;
         }
 
-        /* BUTTON */
+        .pin-note {
+            color: #6b7280;
+            font-size: 13px;
+            margin-top: -12px;
+            margin-bottom: 20px;
+        }
+
+        .networks {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .network {
+            padding: 12px 5px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .network.active {
+            border-color: #0b7a3b;
+            background: #e8f7ee;
+            color: #0b7a3b;
+        }
+
+        .plans {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .plan {
+            padding: 18px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .plan:hover {
+            border-color: #0b7a3b;
+        }
+
+        .plan.active {
+            border-color: #0b7a3b;
+            background: #e8f7ee;
+        }
+
+        .plan strong {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .price {
+            color: #0b7a3b;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .summary {
+            background: #f3f4f6;
+            padding: 18px;
+            border-radius: 10px;
+            margin-top: 25px;
+            line-height: 1.8;
+        }
+
         .buy-btn {
             width: 100%;
-            padding: 16px;
+            margin-top: 20px;
+            padding: 15px;
             border: none;
-            border-radius: 8px;
-            background: #176b3a;
+            border-radius: 10px;
+            background: #0b7a3b;
             color: white;
             font-size: 17px;
+            font-weight: bold;
             cursor: pointer;
         }
 
         .buy-btn:hover {
-            opacity: 0.9;
+            background: #096b34;
         }
 
-        /* SELECTED ORDER */
-        .selected-order {
-            margin-top: 20px;
-            padding: 15px;
-            background: #eef8f2;
-            border-radius: 10px;
+        .buy-btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
             display: none;
         }
 
-        .selected-order strong {
-            color: #176b3a;
+        .success {
+            display: block;
+            background: #dcfce7;
+            color: #166534;
         }
 
-        /* MOBILE */
-        @media (max-width: 700px) {
+        .error {
+            display: block;
+            background: #fee2e2;
+            color: #991b1b;
+        }
 
+        .back {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #0b7a3b;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        @media (max-width: 600px) {
             .networks {
                 grid-template-columns: repeat(2, 1fr);
             }
 
             .plans {
-                grid-template-columns: 1fr;
-            }
-
-            .heading h1 {
-                font-size: 32px;
-            }
-
-            .box {
-                padding: 20px;
+                grid-template-columns: repeat(2, 1fr);
             }
         }
     </style>
@@ -221,324 +212,616 @@
 
 <body>
 
-    <!-- NAVIGATION -->
-    <nav>
+<header>
+    <h1>CheapData</h1>
+</header>
 
-        <div class="logo">
-            CheapData
+<div class="container">
+
+    <a href="/dashboard.html" class="back">
+        ← Back to Dashboard
+    </a>
+
+    <div class="card">
+
+        <h2>Buy Data</h2>
+
+        <div class="balance">
+            Wallet Balance:
+            <span id="balance">₦0</span>
         </div>
 
-        <a href="/">
-            ← Back Home
-        </a>
+        <!-- PHONE -->
 
-    </nav>
+        <label>Phone Number</label>
 
+        <input
+            type="tel"
+            id="phone"
+            placeholder="08012345678"
+            maxlength="11"
+            inputmode="numeric"
+        >
 
-    <!-- MAIN -->
-    <main class="container">
+        <!-- NETWORK -->
 
-        <div class="heading">
+        <label>Select Network</label>
 
-            <h1>Buy Data</h1>
-
-            <p>
-                Get affordable data for your network.
-            </p>
-
-        </div>
-
-
-        <!-- NETWORK SELECTION -->
-        <div class="box">
-
-            <h2>1. Select Network</h2>
-
-            <div class="networks">
-
-                <button
-                    class="network-btn"
-                    onclick="selectNetwork(this, 'MTN')">
-                    MTN
-                </button>
-
-                <button
-                    class="network-btn"
-                    onclick="selectNetwork(this, 'Airtel')">
-                    Airtel
-                </button>
-
-                <button
-                    class="network-btn"
-                    onclick="selectNetwork(this, 'Glo')">
-                    Glo
-                </button>
-
-                <button
-                    class="network-btn"
-                    onclick="selectNetwork(this, '9mobile')">
-                    9mobile
-                </button>
-
-            </div>
-
-        </div>
-
-
-        <!-- DATA PLANS -->
-        <div class="box">
-
-            <h2>2. Choose Data Plan</h2>
-
-            <div class="plans">
-
-                <!-- 1GB -->
-                <div
-                    class="plan"
-                    onclick="selectPlan(this, '1GB', 250)">
-
-                    <h3>1GB</h3>
-
-                    <p>
-                        Valid for 30 days
-                    </p>
-
-                    <div class="price">
-                        ₦250
-                    </div>
-
-                </div>
-
-
-                <!-- 2GB -->
-                <div
-                    class="plan"
-                    onclick="selectPlan(this, '2GB', 500)">
-
-                    <h3>2GB</h3>
-
-                    <p>
-                        Valid for 30 days
-                    </p>
-
-                    <div class="price">
-                        ₦500
-                    </div>
-
-                </div>
-
-
-                <!-- 5GB -->
-                <div
-                    class="plan"
-                    onclick="selectPlan(this, '5GB', 1250)">
-
-                    <h3>5GB</h3>
-
-                    <p>
-                        Valid for 30 days
-                    </p>
-
-                    <div class="price">
-                        ₦1,250
-                    </div>
-
-                </div>
-
-
-                <!-- 10GB -->
-                <div
-                    class="plan"
-                    onclick="selectPlan(this, '10GB', 2500)">
-
-                    <h3>10GB</h3>
-
-                    <p>
-                        Valid for 30 days
-                    </p>
-
-                    <div class="price">
-                        ₦2,500
-                    </div>
-
-                </div>
-
-
-                <!-- 20GB -->
-                <div
-                    class="plan"
-                    onclick="selectPlan(this, '20GB', 5_000)">
-
-                    <h3>20GB</h3>
-
-                    <p>
-                        Valid for 30 days
-                    </p>
-
-                    <div class="price">
-                        ₦5,000
-                    </div>
-
-                </div>
-
-
-                <!-- 40GB -->
-                <div
-                    class="plan"
-                    onclick="selectPlan(this, '40GB', 10_000)">
-
-                    <h3>40GB</h3>
-
-                    <p>
-                        Valid for 30 days
-                    </p>
-
-                    <div class="price">
-                        ₦10,000
-                    </div>
-
-                </div>
-
-            </div>
-
-
-            <!-- SELECTED PLAN -->
-            <div
-                class="selected-order"
-                id="selectedOrder">
-
-                Selected:
-
-                <strong id="selectedPlanText"></strong>
-
-            </div>
-
-        </div>
-
-
-        <!-- PHONE NUMBER -->
-        <div class="box">
-
-            <h2>3. Enter Phone Number</h2>
-
-            <div class="form-group">
-
-                <label for="phone">
-                    Phone Number
-                </label>
-
-                <input
-                    type="tel"
-                    id="phone"
-                    placeholder="08012345678"
-                    maxlength="11">
-
-            </div>
-
+        <div class="networks">
 
             <button
-                class="buy-btn"
-                onclick="buyData()">
+                type="button"
+                class="network active"
+                onclick="selectNetwork('MTN', this)"
+            >
+                MTN
+            </button>
 
-                Continue
+            <button
+                type="button"
+                class="network"
+                onclick="selectNetwork('Airtel', this)"
+            >
+                Airtel
+            </button>
 
+            <button
+                type="button"
+                class="network"
+                onclick="selectNetwork('Glo', this)"
+            >
+                Glo
+            </button>
+
+            <button
+                type="button"
+                class="network"
+                onclick="selectNetwork('9mobile', this)"
+            >
+                9mobile
             </button>
 
         </div>
 
-    </main>
+        <!-- DATA PLANS -->
 
+        <label>Select Data Plan</label>
 
-    <!-- JAVASCRIPT -->
-    <script>
+        <div class="plans">
 
-        let selectedNetwork = "";
-        let selectedPlan = "";
-        let selectedPrice = 0;
+            <button
+                type="button"
+                class="plan"
+                onclick="selectPlan('1GB', 250, this)"
+            >
+                <strong>1GB</strong>
+                <span class="price">₦250</span>
+            </button>
 
+            <button
+                type="button"
+                class="plan"
+                onclick="selectPlan('2GB', 500, this)"
+            >
+                <strong>2GB</strong>
+                <span class="price">₦500</span>
+            </button>
 
-        // SELECT NETWORK
-        function selectNetwork(button, network) {
+            <button
+                type="button"
+                class="plan"
+                onclick="selectPlan('5GB', 1250, this)"
+            >
+                <strong>5GB</strong>
+                <span class="price">₦1,250</span>
+            </button>
 
-            document
-                .querySelectorAll(".network-btn")
-                .forEach(btn => {
-                    btn.classList.remove("active");
-                });
+            <button
+                type="button"
+                class="plan"
+                onclick="selectPlan('10GB', 2500, this)"
+            >
+                <strong>10GB</strong>
+                <span class="price">₦2,500</span>
+            </button>
 
-            button.classList.add("active");
+            <button
+                type="button"
+                class="plan"
+                onclick="selectPlan('20GB', 5000, this)"
+            >
+                <strong>20GB</strong>
+                <span class="price">₦5,000</span>
+            </button>
 
-            selectedNetwork = network;
+            <button
+                type="button"
+                class="plan"
+                onclick="selectPlan('40GB', 10000, this)"
+            >
+                <strong>40GB</strong>
+                <span class="price">₦10,000</span>
+            </button>
 
+        </div>
+
+        <!-- PURCHASE PIN -->
+
+        <label style="margin-top: 25px;">
+            Purchase PIN
+        </label>
+
+        <input
+            type="password"
+            id="purchasePin"
+            class="pin-input"
+            placeholder="••••"
+            maxlength="4"
+            inputmode="numeric"
+            autocomplete="off"
+        >
+
+        <div class="pin-note">
+            Enter your 4-digit Purchase PIN to authorize this purchase.
+        </div>
+
+        <!-- SUMMARY -->
+
+        <div class="summary">
+
+            <strong>Order Summary</strong>
+
+            <div>
+                Network:
+                <span id="summaryNetwork">MTN</span>
+            </div>
+
+            <div>
+                Plan:
+                <span id="summaryPlan">Not selected</span>
+            </div>
+
+            <div>
+                Phone:
+                <span id="summaryPhone">Not entered</span>
+            </div>
+
+            <div>
+                Amount:
+                <strong id="summaryAmount">₦0</strong>
+            </div>
+
+        </div>
+
+        <!-- BUY BUTTON -->
+
+        <button
+            type="button"
+            id="buyButton"
+            class="buy-btn"
+            onclick="purchaseData()"
+            disabled
+        >
+            Select a Data Plan
+        </button>
+
+        <!-- MESSAGE -->
+
+        <div
+            id="message"
+            class="message"
+        ></div>
+
+    </div>
+
+</div>
+
+<script>
+
+    // =========================
+    // LOGIN CHECK
+    // =========================
+
+    const savedUser =
+        localStorage.getItem("cheapdataUser");
+
+    if (!savedUser) {
+        window.location.href = "/login.html";
+    }
+
+    let user;
+
+    try {
+
+        user = JSON.parse(savedUser);
+
+    } catch (error) {
+
+        localStorage.removeItem("cheapdataUser");
+
+        window.location.href = "/login.html";
+    }
+
+    // =========================
+    // VARIABLES
+    // =========================
+
+    let selectedNetwork = "MTN";
+    let selectedPlan = "";
+    let selectedPrice = 0;
+
+    // =========================
+    // LOAD BALANCE
+    // =========================
+
+    async function loadBalance() {
+
+        try {
+
+            const response =
+                await fetch(`/api/user/${user.id}`);
+
+            const data =
+                await response.json();
+
+            if (data.success) {
+
+                user = data.user;
+
+                localStorage.setItem(
+                    "cheapdataUser",
+                    JSON.stringify(user)
+                );
+
+                document.getElementById("balance")
+                    .textContent =
+                    `₦${Number(user.balance).toLocaleString()}`;
+            }
+
+        } catch (error) {
+
+            console.error(
+                "Balance error:",
+                error
+            );
         }
+    }
 
+    loadBalance();
 
-        // SELECT DATA PLAN
-        function selectPlan(element, plan, price) {
+    // =========================
+    // SELECT NETWORK
+    // =========================
 
-            document
-                .querySelectorAll(".plan")
-                .forEach(item => {
-                    item.classList.remove("selected");
-                });
+    function selectNetwork(network, button) {
 
-            element.classList.add("selected");
+        selectedNetwork = network;
 
-            selectedPlan = plan;
-            selectedPrice = price;
+        document
+            .querySelectorAll(".network")
+            .forEach(btn => {
+                btn.classList.remove("active");
+            });
 
+        button.classList.add("active");
 
-            document.getElementById("selectedOrder").style.display = "block";
+        document.getElementById(
+            "summaryNetwork"
+        ).textContent = network;
+    }
 
-            document.getElementById("selectedPlanText").textContent =
-                `${selectedNetwork || "Network not selected"} - ${plan} - ₦${price.toLocaleString()}`;
+    // =========================
+    // SELECT PLAN
+    // =========================
 
-        }
+    function selectPlan(plan, price, button) {
 
+        selectedPlan = plan;
+        selectedPrice = price;
 
-        // BUY DATA
-        function buyData() {
+        document
+            .querySelectorAll(".plan")
+            .forEach(btn => {
+                btn.classList.remove("active");
+            });
 
-            const phone =
-                document.getElementById("phone").value.trim();
+        button.classList.add("active");
 
+        document.getElementById(
+            "summaryPlan"
+        ).textContent = plan;
 
-            if (!selectedNetwork) {
+        document.getElementById(
+            "summaryAmount"
+        ).textContent =
+            `₦${price.toLocaleString()}`;
 
-                alert("Please select a network.");
+        const buyButton =
+            document.getElementById("buyButton");
 
-                return;
+        buyButton.disabled = false;
+
+        buyButton.textContent =
+            `Buy ${plan} for ₦${price.toLocaleString()}`;
+
+        updatePhoneSummary();
+    }
+
+    // =========================
+    // PHONE SUMMARY
+    // =========================
+
+    document
+        .getElementById("phone")
+        .addEventListener(
+            "input",
+            updatePhoneSummary
+        );
+
+    function updatePhoneSummary() {
+
+        const phone =
+            document.getElementById("phone")
+                .value;
+
+        document.getElementById(
+            "summaryPhone"
+        ).textContent =
+            phone || "Not entered";
+    }
+
+    // =========================
+    // PIN INPUT
+    // =========================
+
+    document
+        .getElementById("purchasePin")
+        .addEventListener(
+            "input",
+            function () {
+
+                this.value =
+                    this.value
+                        .replace(/\D/g, "")
+                        .slice(0, 4);
             }
+        );
 
+    // =========================
+    // SHOW MESSAGE
+    // =========================
 
-            if (!selectedPlan) {
+    function showMessage(text, type) {
 
-                alert("Please select a data plan.");
+        const message =
+            document.getElementById("message");
 
-                return;
-            }
+        message.textContent = text;
 
+        message.className =
+            `message ${type}`;
 
-            if (!/^0[789][01][0-9]{8}$/.test(phone)) {
+        message.style.display = "block";
+    }
 
-                alert("Please enter a valid Nigerian phone number.");
+    // =========================
+    // PURCHASE DATA
+    // =========================
 
-                return;
-            }
+    async function purchaseData() {
 
+        const phone =
+            document.getElementById("phone")
+                .value
+                .trim();
 
-            alert(
-                `Order ready!\n\n` +
-                `Network: ${selectedNetwork}\n` +
-                `Plan: ${selectedPlan}\n` +
-                `Price: ₦${selectedPrice.toLocaleString()}\n` +
-                `Phone: ${phone}`
+        const pin =
+            document.getElementById("purchasePin")
+                .value
+                .trim();
+
+        const buyButton =
+            document.getElementById("buyButton");
+
+        // Clear previous message
+
+        const message =
+            document.getElementById("message");
+
+        message.className = "message";
+        message.style.display = "none";
+
+        // =========================
+        // VALIDATE PHONE
+        // =========================
+
+        if (!/^0[7-9][0-1][0-9]{8}$/.test(phone)) {
+
+            showMessage(
+                "Please enter a valid Nigerian phone number.",
+                "error"
             );
 
+            return;
         }
 
-    </script>
+        // =========================
+        // VALIDATE PLAN
+        // =========================
+
+        if (!selectedPlan || !selectedPrice) {
+
+            showMessage(
+                "Please select a data plan.",
+                "error"
+            );
+
+            return;
+        }
+
+        // =========================
+        // VALIDATE PIN
+        // =========================
+
+        if (!/^\d{4}$/.test(pin)) {
+
+            showMessage(
+                "Please enter your 4-digit Purchase PIN.",
+                "error"
+            );
+
+            return;
+        }
+
+        // =========================
+        // CHECK BALANCE
+        // =========================
+
+        if (Number(user.balance) < selectedPrice) {
+
+            showMessage(
+                "Insufficient wallet balance.",
+                "error"
+            );
+
+            return;
+        }
+
+        // =========================
+        // CONFIRM PURCHASE
+        // =========================
+
+        const confirmed = confirm(
+            `Buy ${selectedPlan} ${selectedNetwork} data for ${phone} for ₦${selectedPrice.toLocaleString()}?`
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        // =========================
+        // PROCESSING
+        // =========================
+
+        buyButton.disabled = true;
+
+        buyButton.textContent =
+            "Processing...";
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/purchase-data",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            userId: user.id,
+
+                            network:
+                                selectedNetwork,
+
+                            plan:
+                                selectedPlan,
+
+                            phone:
+                                phone,
+
+                            amount:
+                                selectedPrice,
+
+                            pin:
+                                pin
+                        })
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            // =========================
+            // SERVER ERROR
+            // =========================
+
+            if (!response.ok || !data.success) {
+
+                showMessage(
+                    data.message ||
+                    "Purchase failed.",
+                    "error"
+                );
+
+                buyButton.disabled = false;
+
+                buyButton.textContent =
+                    `Buy ${selectedPlan} for ₦${selectedPrice.toLocaleString()}`;
+
+                return;
+            }
+
+            // =========================
+            // UPDATE BALANCE
+            // =========================
+
+            user.balance =
+                data.balance;
+
+            localStorage.setItem(
+                "cheapdataUser",
+                JSON.stringify(user)
+            );
+
+            document.getElementById(
+                "balance"
+            ).textContent =
+                `₦${Number(data.balance).toLocaleString()}`;
+
+            // =========================
+            // SUCCESS
+            // =========================
+
+            showMessage(
+                `Purchase successful! ${data.network} ${data.plan} sent to ${data.phone}. Reference: ${data.reference}`,
+                "success"
+            );
+
+            buyButton.textContent =
+                "Purchase Successful";
+
+            // Clear PIN
+
+            document.getElementById(
+                "purchasePin"
+            ).value = "";
+
+        } catch (error) {
+
+            console.error(
+                "Purchase error:",
+                error
+            );
+
+            showMessage(
+                "Unable to connect to the server. Please try again.",
+                "error"
+            );
+
+            buyButton.disabled = false;
+
+            buyButton.textContent =
+                `Buy ${selectedPlan} for ₦${selectedPrice.toLocaleString()}`;
+        }
+    }
+
+</script>
 
 </body>
-
 </html>
+```

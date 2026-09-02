@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CheapData Admin</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background: #f4f7fb;
+            color: #1f2937;
+        }
+
+        header {
+            background: #111827;
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        header h1 {
+            font-size: 24px;
+        }
+
+        header p {
+            margin-top: 5px;
+            color: #d1d5db;
+        }
+
+        .logout-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .logout-btn:hover {
+            background: #dc2626;
+        }
+
+        .container {
+            width: 95%;
+            max-width: 1400px;
+            margin: 30px auto;
+        }
+
+        .welcome {
+            margin-bottom: 25px;
+        }
+
+        .welcome h2 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .welcome p {
+            color: #6b7280;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+        }
+
+        .card h3 {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 10px;
+        }
+
+        .card .value {
+            font-size: 25px;
+            font-weight: bold;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+        }
+
+        .section h2 {
+            margin-bottom: 20px;
+        }
+
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 900px;
+        }
+
+        th,
+        td {
+            padding: 13px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f9fafb;
+            font-size: 14px;
+        }
+
+        td {
+            font-size: 14px;
+        }
+
+        tr:hover td {
+            background: #f9fafb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 9px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .badge-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-admin {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 30px;
+            color: #6b7280;
+        }
+
+        @media (max-width: 1100px) {
+            .stats {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 700px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 450px) {
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                width: 92%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <div>
+        <h1>CheapData Admin</h1>
+        <p>Manage your CheapData platform</p>
+    </div>
+
+    <button class="logout-btn" onclick="logout()">
+        Logout
+    </button>
+</header>
+
+<div class="container">
+
+    <div id="message" class="message"></div>
+
+    <div class="welcome">
+        <h2>Welcome, <span id="adminName">Admin</span></h2>
+        <p>Here is an overview of your CheapData platform.</p>
+    </div>
+
+    <!-- STATISTICS -->
+
+    <div class="stats">
+
+        <div class="card">
+            <h3>Total Users</h3>
+            <div class="value" id="totalUsers">0</div>
+        </div>
+
+        <div class="card">
+            <h3>Total Wallet Balance</h3>
+            <div class="value" id="totalBalance">₦0</div>
+        </div>
+
+        <div class="card">
+            <h3>Total Transactions</h3>
+            <div class="value" id="totalTransactions">0</div>
+        </div>
+
+        <div class="card">
+            <h3>Data Purchases</h3>
+            <div class="value" id="dataPurchases">0</div>
+        </div>
+
+        <div class="card">
+            <h3>Airtime Purchases</h3>
+            <div class="value" id="airtimePurchases">0</div>
+        </div>
+
+        <div class="card">
+            <h3>Total Sales</h3>
+            <div class="value" id="totalRevenue">₦0</div>
+        </div>
+
+    </div>
+
+
+    <!-- USERS -->
+
+    <div class="section">
+
+        <h2>Registered Users</h2>
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Balance</th>
+                        <th>KYC</th>
+                        <th>Admin</th>
+                    </tr>
+                </thead>
+
+                <tbody id="usersTable">
+
+                    <tr>
+                        <td colspan="7" class="empty">
+                            Loading users...
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- TRANSACTIONS -->
+
+    <div class="section">
+
+        <h2>Recent Transactions</h2>
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>User</th>
+                        <th>Email</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Reference</th>
+                        <th>Description</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+
+                <tbody id="transactionsTable">
+
+                    <tr>
+                        <td colspan="9" class="empty">
+                            Loading transactions...
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+    // =========================
+    // HELPERS
+    // =========================
+
+    function escapeHtml(value) {
+
+        if (value === null || value === undefined) {
+            return "";
+        }
+
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+
+    function formatMoney(amount) {
+
+        return "₦" + Number(amount || 0).toLocaleString(
+            "en-NG",
+            {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            }
+        );
+
+    }
+
+
+    function showMessage(message, type = "error") {
+
+        const element = document.getElementById("message");
+
+        element.textContent = message;
+
+        element.className = "message " + type;
+
+        element.style.display = "block";
+
+    }
+
+
+    // =========================
+    // LOGOUT
+    // =========================
+
+    function logout() {
+
+        localStorage.removeItem("cheapdataUser");
+
+        window.location.href = "/login.html";
+
+    }
+
+
+    // =========================
+    // LOAD ADMIN
+    // =========================
+
+    async function loadAdmin() {
+
+        try {
+
+            const storedUser =
+                JSON.parse(
+                    localStorage.getItem("cheapdataUser")
+                );
+
+            if (!storedUser || !storedUser.id) {
+
+                window.location.href = "/login.html";
+
+                return;
+
+            }
+
+
+            // Get fresh account information
+
+            const userResponse =
+                await fetch(
+                    `/api/user/${storedUser.id}`
+                );
+
+            const userData =
+                await userResponse.json();
+
+
+            if (
+                !userResponse.ok ||
+                !userData.success ||
+                !userData.user
+            ) {
+
+                throw new Error(
+                    userData.message ||
+                    "Could not verify account."
+                );
+
+            }
+
+
+            const user = userData.user;
+
+
+            // Check admin status
+
+            if (Number(user.is_admin) !== 1) {
+
+                showMessage(
+                    "You do not have administrator access.",
+                    "error"
+                );
+
+                setTimeout(() => {
+
+                    window.location.href =
+                        "/dashboard.html";
+
+                }, 2000);
+
+                return;
+
+            }
+
+
+            // Save fresh user information
+
+            localStorage.setItem(
+                "cheapdataUser",
+                JSON.stringify(user)
+            );
+
+
+            document.getElementById(
+                "adminName"
+            ).textContent =
+                user.name;
+
+
+            // Load everything
+
+            await Promise.all([
+                loadStats(user.id),
+                loadUsers(user.id),
+                loadTransactions(user.id)
+            ]);
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            showMessage(
+                error.message ||
+                "Could not verify account.",
+                "error"
+            );
+
+        }
+
+    }
+
+
+    // =========================
+    // LOAD STATS
+    // =========================
+
+    async function loadStats(userId) {
+
+        const response =
+            await fetch(
+                `/api/admin/stats/${userId}`
+            );
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok || !data.success) {
+
+            throw new Error(
+                data.message ||
+                "Could not load statistics."
+            );
+
+        }
+
+
+        const stats = data.stats;
+
+
+        document.getElementById(
+            "totalUsers"
+        ).textContent =
+            stats.totalUsers;
+
+
+        document.getElementById(
+            "totalBalance"
+        ).textContent =
+            formatMoney(stats.totalBalance);
+
+
+        document.getElementById(
+            "totalTransactions"
+        ).textContent =
+            stats.totalTransactions;
+
+
+        document.getElementById(
+            "dataPurchases"
+        ).textContent =
+            stats.dataPurchases;
+
+
+        document.getElementById(
+            "airtimePurchases"
+        ).textContent =
+            stats.airtimePurchases;
+
+
+        document.getElementById(
+            "totalRevenue"
+        ).textContent =
+            formatMoney(stats.totalRevenue);
+
+    }
+
+
+    // =========================
+    // LOAD USERS
+    // =========================
+
+    async function loadUsers(userId) {
+
+        const response =
+            await fetch(
+                `/api/admin/users/${userId}`
+            );
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok || !data.success) {
+
+            throw new Error(
+                data.message ||
+                "Could not load users."
+            );
+
+        }
+
+
+        const users = data.users;
+
+        const table =
+            document.getElementById(
+                "usersTable"
+            );
+
+
+        if (!users.length) {
+
+            table.innerHTML = `
+                <tr>
+                    <td colspan="7" class="empty">
+                        No users found.
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
+
+
+        table.innerHTML =
+            users.map(user => `
+
+                <tr>
+
+                    <td>
+                        ${escapeHtml(user.id)}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(user.name)}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(user.email)}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(user.phone)}
+                    </td>
+
+                    <td>
+                        ${formatMoney(user.balance)}
+                    </td>
+
+                    <td>
+
+                        <span class="badge ${
+                            user.kyc_status === "approved"
+                                ? "badge-success"
+                                : "badge-pending"
+                        }">
+
+                            ${escapeHtml(
+                                user.kyc_status || "pending"
+                            )}
+
+                        </span>
+
+                    </td>
+
+                    <td>
+
+                        ${
+                            Number(user.is_admin) === 1
+                                ? `<span class="badge badge-admin">Yes</span>`
+                                : "No"
+                        }
+
+                    </td>
+
+                </tr>
+
+            `).join("");
+
+    }
+
+
+    // =========================
+    // LOAD TRANSACTIONS
+    // =========================
+
+    async function loadTransactions(userId) {
+
+        const response =
+            await fetch(
+                `/api/admin/transactions/${userId}`
+            );
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok || !data.success) {
+
+            throw new Error(
+                data.message ||
+                "Could not load transactions."
+            );
+
+        }
+
+
+        const transactions =
+            data.transactions;
+
+        const table =
+            document.getElementById(
+                "transactionsTable"
+            );
+
+
+        if (!transactions.length) {
+
+            table.innerHTML = `
+                <tr>
+                    <td colspan="9" class="empty">
+                        No transactions found.
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
+
+
+        table.innerHTML =
+            transactions.map(transaction => `
+
+                <tr>
+
+                    <td>
+                        ${escapeHtml(transaction.id)}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            transaction.user_name ||
+                            "Unknown User"
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            transaction.user_email ||
+                            "-"
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            transaction.type
+                        )}
+                    </td>
+
+                    <td>
+                        ${formatMoney(
+                            transaction.amount
+                        )}
+                    </td>
+
+                    <td>
+
+                        <span class="badge ${
+                            transaction.status === "successful"
+                                ? "badge-success"
+                                : "badge-pending"
+                        }">
+
+                            ${escapeHtml(
+                                transaction.status
+                            )}
+
+                        </span>
+
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            transaction.reference
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            transaction.description
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            transaction.created_at
+                        )}
+                    </td>
+
+                </tr>
+
+            `).join("");
+
+    }
+
+
+    // =========================
+    // START
+    // =========================
+
+    loadAdmin();
+
+</script>
+
+</body>
+</html>
