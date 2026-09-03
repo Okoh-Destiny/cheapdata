@@ -169,6 +169,76 @@
             color: #667085;
         }
 
+        /* ADMIN */
+
+        .admin-section {
+            margin-bottom: 35px;
+        }
+
+        .admin-card {
+            background: linear-gradient(
+                135deg,
+                #172033,
+                #26344d
+            );
+
+            color: white;
+
+            padding: 25px;
+
+            border-radius: 15px;
+
+            box-shadow:
+                0 8px 25px rgba(23, 32, 51, 0.15);
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+
+            gap: 20px;
+        }
+
+        .admin-card-icon {
+            font-size: 38px;
+            margin-bottom: 10px;
+        }
+
+        .admin-card h3 {
+            margin-bottom: 7px;
+        }
+
+        .admin-card p {
+            color: #d0d5dd;
+        }
+
+        .admin-button {
+            display: inline-block;
+
+            background: white;
+
+            color: #172033;
+
+            text-decoration: none;
+
+            padding: 13px 20px;
+
+            border-radius: 9px;
+
+            font-weight: bold;
+
+            white-space: nowrap;
+
+            transition: 0.2s;
+        }
+
+        .admin-button:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
         .account-card {
             background: white;
 
@@ -296,6 +366,16 @@
                 gap: 15px;
             }
 
+            .admin-card {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .admin-button {
+                width: 100%;
+                text-align: center;
+            }
+
         }
 
     </style>
@@ -415,6 +495,49 @@
 
         </a>
 
+
+    </div>
+
+
+    <!-- ADMIN PANEL -->
+
+    <div
+        id="adminSection"
+        class="admin-section"
+        style="display: none;">
+
+        <h2 class="section-title">
+            Administration
+        </h2>
+
+        <div class="admin-card">
+
+            <div>
+
+                <div class="admin-card-icon">
+                    🛠️
+                </div>
+
+                <h3>
+                    CheapData Admin Panel
+                </h3>
+
+                <p>
+                    Manage users, transactions, data plans and
+                    platform settings.
+                </p>
+
+            </div>
+
+            <a
+                href="/admin.html"
+                class="admin-button">
+
+                Open Admin Panel →
+
+            </a>
+
+        </div>
 
     </div>
 
@@ -552,6 +675,19 @@ if (!savedUser) {
         user.phone;
 
 
+    // Show admin panel immediately if saved user is admin
+
+    if (
+        Number(user.is_admin) === 1
+    ) {
+
+        document.getElementById(
+            "adminSection"
+        ).style.display = "block";
+
+    }
+
+
     loadUser();
 
 }
@@ -573,7 +709,10 @@ async function loadUser() {
 
         const response =
             await fetch(
-                "/api/user/" + user.id
+                "/api/user/" + user.id,
+                {
+                    credentials: "include"
+                }
             );
 
 
@@ -596,6 +735,25 @@ async function loadUser() {
                 ).toLocaleString();
 
 
+            // Show admin panel using fresh database value
+
+            if (
+                Number(updatedUser.is_admin) === 1
+            ) {
+
+                document.getElementById(
+                    "adminSection"
+                ).style.display = "block";
+
+            } else {
+
+                document.getElementById(
+                    "adminSection"
+                ).style.display = "none";
+
+            }
+
+
             localStorage.setItem(
                 "cheapdataUser",
                 JSON.stringify({
@@ -614,6 +772,9 @@ async function loadUser() {
 
                     balance:
                         updatedUser.balance,
+
+                    is_admin:
+                        updatedUser.is_admin,
 
                     virtualAccountNumber:
                         updatedUser.virtual_account_number,
@@ -668,7 +829,10 @@ async function loadTransactions(userId) {
         const response =
             await fetch(
                 "/api/transactions/" +
-                userId
+                userId,
+                {
+                    credentials: "include"
+                }
             );
 
 
@@ -819,7 +983,27 @@ async function loadTransactions(userId) {
 // LOGOUT
 // ========================================
 
-function logout() {
+async function logout() {
+
+    try {
+
+        await fetch(
+            "/api/logout",
+            {
+                method: "POST",
+                credentials: "include"
+            }
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Logout error:",
+            error
+        );
+
+    }
+
 
     localStorage.removeItem(
         "cheapdataUser"

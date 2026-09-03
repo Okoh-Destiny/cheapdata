@@ -38,14 +38,24 @@
             color: #d1d5db;
         }
 
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        button {
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 8px;
+            transition: 0.2s;
+        }
+
         .logout-btn {
             background: #ef4444;
             color: white;
-            border: none;
             padding: 10px 18px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
         }
 
         .logout-btn:hover {
@@ -76,6 +86,7 @@
             border-radius: 8px;
             margin-bottom: 20px;
             display: none;
+            line-height: 1.5;
         }
 
         .error {
@@ -86,6 +97,11 @@
         .success {
             background: #dcfce7;
             color: #166534;
+        }
+
+        .info {
+            background: #dbeafe;
+            color: #1e40af;
         }
 
         .stats {
@@ -121,8 +137,124 @@
             box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
         }
 
-        .section h2 {
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .section-header h2 {
+            margin: 0;
+        }
+
+        .section-description {
+            color: #6b7280;
+            margin-top: 6px;
+            font-size: 14px;
+        }
+
+        .sync-box {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .sync-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .sync-info h3 {
+            margin-bottom: 7px;
+            font-size: 18px;
+        }
+
+        .sync-info p {
+            color: #6b7280;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .sync-btn {
+            background: #2563eb;
+            color: white;
+            padding: 12px 20px;
+            min-width: 190px;
+        }
+
+        .sync-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .sync-btn:disabled {
+            background: #93c5fd;
+            cursor: not-allowed;
+        }
+
+        .refresh-btn {
+            background: #111827;
+            color: white;
+            padding: 10px 16px;
+        }
+
+        .refresh-btn:hover {
+            background: #374151;
+        }
+
+        .sync-result {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+        }
+
+        .sync-result h3 {
+            margin-bottom: 15px;
+        }
+
+        .sync-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+
+        .sync-stat {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .sync-stat strong {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 5px;
+        }
+
+        .sync-stat span {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .markup-box {
+            margin-top: 20px;
+            padding: 15px;
+            background: #eff6ff;
+            border-radius: 10px;
+            color: #1e40af;
+        }
+
+        .markup-box strong {
+            font-size: 18px;
         }
 
         .table-container {
@@ -180,14 +312,59 @@
             color: #1d4ed8;
         }
 
+        .badge-inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .network-mtn {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .network-airtel {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .network-glo {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .network-9mobile {
+            background: #ede9fe;
+            color: #6d28d9;
+        }
+
         .empty {
             text-align: center;
             padding: 30px;
             color: #6b7280;
         }
 
-        @media (max-width: 1100px) {
+        .loading {
+            opacity: 0.6;
+        }
+
+        .danger-text {
+            color: #dc2626;
+        }
+
+        .success-text {
+            color: #166534;
+        }
+
+        .price-cell {
+            font-weight: bold;
+        }
+
+        @media (max-width: 1200px) {
             .stats {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .sync-grid {
                 grid-template-columns: repeat(3, 1fr);
             }
         }
@@ -201,10 +378,22 @@
             .stats {
                 grid-template-columns: repeat(2, 1fr);
             }
+
+            .sync-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .sync-btn {
+                width: 100%;
+            }
         }
 
         @media (max-width: 450px) {
             .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .sync-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -218,24 +407,40 @@
 <body>
 
 <header>
+
     <div>
         <h1>CheapData Admin</h1>
         <p>Manage your CheapData platform</p>
     </div>
 
-    <button class="logout-btn" onclick="logout()">
-        Logout
-    </button>
+    <div class="header-buttons">
+        <button class="logout-btn" onclick="logout()">
+            Logout
+        </button>
+    </div>
+
 </header>
+
 
 <div class="container">
 
     <div id="message" class="message"></div>
 
+
+    <!-- WELCOME -->
+
     <div class="welcome">
-        <h2>Welcome, <span id="adminName">Admin</span></h2>
-        <p>Here is an overview of your CheapData platform.</p>
+
+        <h2>
+            Welcome, <span id="adminName">Admin</span>
+        </h2>
+
+        <p>
+            Here is an overview of your CheapData platform.
+        </p>
+
     </div>
+
 
     <!-- STATISTICS -->
 
@@ -274,17 +479,193 @@
     </div>
 
 
-    <!-- USERS -->
+    <!-- WISESUB SYNC -->
 
     <div class="section">
 
-        <h2>Registered Users</h2>
+        <div class="section-header">
+
+            <div>
+                <h2>WiseSub Data Plans</h2>
+
+                <p class="section-description">
+                    Synchronize data plans from WiseSub into your CheapData database.
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="sync-box">
+
+            <div class="sync-content">
+
+                <div class="sync-info">
+
+                    <h3>Sync Provider Plans</h3>
+
+                    <p>
+                        This will retrieve the latest data plans from WiseSub,
+                        calculate your CheapData selling prices, and update your database.
+                    </p>
+
+                </div>
+
+
+                <button
+                    id="syncButton"
+                    class="sync-btn"
+                    onclick="syncWiseSub()"
+                >
+                    🔄 Sync WiseSub Plans
+                </button>
+
+            </div>
+
+
+            <div id="syncResult" class="sync-result">
+
+                <h3>Sync Result</h3>
+
+                <div class="sync-grid">
+
+                    <div class="sync-stat">
+                        <strong id="syncReceived">0</strong>
+                        <span>Received</span>
+                    </div>
+
+                    <div class="sync-stat">
+                        <strong id="syncAdded">0</strong>
+                        <span>Added</span>
+                    </div>
+
+                    <div class="sync-stat">
+                        <strong id="syncUpdated">0</strong>
+                        <span>Updated</span>
+                    </div>
+
+                    <div class="sync-stat">
+                        <strong id="syncSkipped">0</strong>
+                        <span>Skipped</span>
+                    </div>
+
+                    <div class="sync-stat">
+                        <strong id="syncFailed">0</strong>
+                        <span>Failed</span>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="markup-box">
+
+                Current CheapData markup:
+
+                <strong id="markupPercent">
+                    Loading...
+                </strong>
+
+                <br>
+
+                <small>
+                    Selling prices are calculated from the provider cost plus your configured markup.
+                </small>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- DATA PLANS -->
+
+    <div class="section">
+
+        <div class="section-header">
+
+            <div>
+                <h2>Data Plans</h2>
+
+                <p class="section-description">
+                    Data plans currently stored in your CheapData database.
+                </p>
+            </div>
+
+            <button
+                class="refresh-btn"
+                onclick="loadDataPlans()"
+            >
+                ↻ Refresh Plans
+            </button>
+
+        </div>
+
 
         <div class="table-container">
 
             <table>
 
                 <thead>
+
+                    <tr>
+                        <th>ID</th>
+                        <th>Network</th>
+                        <th>Plan</th>
+                        <th>Validity</th>
+                        <th>Provider Cost</th>
+                        <th>CheapData Price</th>
+                        <th>Status</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="plansTable">
+
+                    <tr>
+                        <td colspan="7" class="empty">
+                            Loading data plans...
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- USERS -->
+
+    <div class="section">
+
+        <div class="section-header">
+
+            <div>
+                <h2>Registered Users</h2>
+            </div>
+
+            <button
+                class="refresh-btn"
+                onclick="loadUsers()"
+            >
+                ↻ Refresh Users
+            </button>
+
+        </div>
+
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
                     <tr>
                         <th>ID</th>
                         <th>Name</th>
@@ -294,7 +675,9 @@
                         <th>KYC</th>
                         <th>Admin</th>
                     </tr>
+
                 </thead>
+
 
                 <tbody id="usersTable">
 
@@ -317,13 +700,28 @@
 
     <div class="section">
 
-        <h2>Recent Transactions</h2>
+        <div class="section-header">
+
+            <div>
+                <h2>Recent Transactions</h2>
+            </div>
+
+            <button
+                class="refresh-btn"
+                onclick="loadTransactions()"
+            >
+                ↻ Refresh Transactions
+            </button>
+
+        </div>
+
 
         <div class="table-container">
 
             <table>
 
                 <thead>
+
                     <tr>
                         <th>ID</th>
                         <th>User</th>
@@ -335,7 +733,9 @@
                         <th>Description</th>
                         <th>Date</th>
                     </tr>
+
                 </thead>
+
 
                 <tbody id="transactionsTable">
 
@@ -358,9 +758,9 @@
 
 <script>
 
-    // =========================
+    // =====================================================
     // HELPERS
-    // =========================
+    // =====================================================
 
     function escapeHtml(value) {
 
@@ -392,156 +792,250 @@
 
     function showMessage(message, type = "error") {
 
-        const element = document.getElementById("message");
+        const element =
+            document.getElementById("message");
 
         element.textContent = message;
 
-        element.className = "message " + type;
+        element.className =
+            "message " + type;
 
         element.style.display = "block";
 
-    }
-
-
-    // =========================
-    // LOGOUT
-    // =========================
-
-    function logout() {
-
-        localStorage.removeItem("cheapdataUser");
-
-        window.location.href = "/login.html";
+        window.scrollTo({
+            top: 0,
+            behavior: "smooth"
+        });
 
     }
 
 
-    // =========================
-    // LOAD ADMIN
-    // =========================
+    function hideMessage() {
 
-    async function loadAdmin() {
+        const element =
+            document.getElementById("message");
+
+        element.style.display = "none";
+
+    }
+
+
+    async function getJson(response) {
+
+        const text =
+            await response.text();
+
+        let data;
 
         try {
 
-            const storedUser =
-                JSON.parse(
-                    localStorage.getItem("cheapdataUser")
-                );
+            data = JSON.parse(text);
 
-            if (!storedUser || !storedUser.id) {
+        } catch (error) {
 
-                window.location.href = "/login.html";
-
-                return;
-
-            }
-
-
-            // Get fresh account information
-
-            const userResponse =
-                await fetch(
-                    `/api/user/${storedUser.id}`
-                );
-
-            const userData =
-                await userResponse.json();
-
-
-            if (
-                !userResponse.ok ||
-                !userData.success ||
-                !userData.user
-            ) {
-
-                throw new Error(
-                    userData.message ||
-                    "Could not verify account."
-                );
-
-            }
-
-
-            const user = userData.user;
-
-
-            // Check admin status
-
-            if (Number(user.is_admin) !== 1) {
-
-                showMessage(
-                    "You do not have administrator access.",
-                    "error"
-                );
-
-                setTimeout(() => {
-
-                    window.location.href =
-                        "/dashboard.html";
-
-                }, 2000);
-
-                return;
-
-            }
-
-
-            // Save fresh user information
-
-            localStorage.setItem(
-                "cheapdataUser",
-                JSON.stringify(user)
+            console.error(
+                "Server returned:",
+                text
             );
 
-
-            document.getElementById(
-                "adminName"
-            ).textContent =
-                user.name;
-
-
-            // Load everything
-
-            await Promise.all([
-                loadStats(user.id),
-                loadUsers(user.id),
-                loadTransactions(user.id)
-            ]);
+            throw new Error(
+                "The server returned an invalid response."
+            );
 
         }
 
-        catch (error) {
+        return data;
+
+    }
+
+
+    // =====================================================
+    // GET CURRENT USER
+    // =====================================================
+
+    function getStoredUser() {
+
+        try {
+
+            const stored =
+                localStorage.getItem(
+                    "cheapdataUser"
+                );
+
+            if (!stored) {
+                return null;
+            }
+
+            return JSON.parse(stored);
+
+        } catch (error) {
 
             console.error(error);
 
-            showMessage(
-                error.message ||
-                "Could not verify account.",
-                "error"
-            );
+            return null;
 
         }
 
     }
 
 
-    // =========================
-    // LOAD STATS
-    // =========================
+    // =====================================================
+    // LOGOUT
+    // =====================================================
 
-    async function loadStats(userId) {
+    async function logout() {
+
+        try {
+
+            await fetch(
+                "/api/logout",
+                {
+                    method: "POST",
+                    credentials: "include"
+                }
+            );
+
+        } catch (error) {
+
+            console.error(error);
+
+        }
+
+        localStorage.removeItem(
+            "cheapdataUser"
+        );
+
+        window.location.href =
+            "/login.html";
+
+    }
+
+
+    // =====================================================
+    // VERIFY ADMIN
+    // =====================================================
+
+    async function verifyAdmin() {
+
+        const storedUser =
+            getStoredUser();
+
+
+        if (!storedUser || !storedUser.id) {
+
+            window.location.href =
+                "/login.html";
+
+            return null;
+
+        }
+
 
         const response =
             await fetch(
-                `/api/admin/stats/${userId}`
+                `/api/user/${storedUser.id}`,
+                {
+                    credentials: "include"
+                }
             );
 
+
         const data =
-            await response.json();
+            await getJson(response);
 
 
-        if (!response.ok || !data.success) {
+        if (
+            !response.ok ||
+            !data.success ||
+            !data.user
+        ) {
+
+            throw new Error(
+                data.message ||
+                "Could not verify your account."
+            );
+
+        }
+
+
+        const user =
+            data.user;
+
+
+        if (Number(user.is_admin) !== 1) {
+
+            showMessage(
+                "You do not have administrator access.",
+                "error"
+            );
+
+
+            setTimeout(() => {
+
+                window.location.href =
+                    "/dashboard.html";
+
+            }, 2000);
+
+
+            return null;
+
+        }
+
+
+        localStorage.setItem(
+            "cheapdataUser",
+            JSON.stringify(user)
+        );
+
+
+        document.getElementById(
+            "adminName"
+        ).textContent =
+            user.name || "Admin";
+
+
+        return user;
+
+    }
+
+
+    // =====================================================
+    // LOAD STATS
+    // =====================================================
+
+    async function loadStats(userId = null) {
+
+        if (!userId) {
+
+            const user =
+                getStoredUser();
+
+            if (!user) return;
+
+            userId =
+                user.id;
+
+        }
+
+
+        const response =
+            await fetch(
+                `/api/admin/stats/${userId}`,
+                {
+                    credentials: "include"
+                }
+            );
+
+
+        const data =
+            await getJson(response);
+
+
+        if (
+            !response.ok ||
+            !data.success
+        ) {
 
             throw new Error(
                 data.message ||
@@ -551,63 +1045,94 @@
         }
 
 
-        const stats = data.stats;
+        const stats =
+            data.stats || {};
 
 
         document.getElementById(
             "totalUsers"
         ).textContent =
-            stats.totalUsers;
+            Number(stats.totalUsers || 0);
 
 
         document.getElementById(
             "totalBalance"
         ).textContent =
-            formatMoney(stats.totalBalance);
+            formatMoney(
+                stats.totalBalance
+            );
 
 
         document.getElementById(
             "totalTransactions"
         ).textContent =
-            stats.totalTransactions;
+            Number(
+                stats.totalTransactions || 0
+            );
 
 
         document.getElementById(
             "dataPurchases"
         ).textContent =
-            stats.dataPurchases;
+            Number(
+                stats.dataPurchases || 0
+            );
 
 
         document.getElementById(
             "airtimePurchases"
         ).textContent =
-            stats.airtimePurchases;
+            Number(
+                stats.airtimePurchases || 0
+            );
 
 
         document.getElementById(
             "totalRevenue"
         ).textContent =
-            formatMoney(stats.totalRevenue);
+            formatMoney(
+                stats.totalRevenue
+            );
 
     }
 
 
-    // =========================
+    // =====================================================
     // LOAD USERS
-    // =========================
+    // =====================================================
 
-    async function loadUsers(userId) {
+    async function loadUsers(userId = null) {
+
+        if (!userId) {
+
+            const user =
+                getStoredUser();
+
+            if (!user) return;
+
+            userId =
+                user.id;
+
+        }
+
 
         const response =
             await fetch(
-                `/api/admin/users/${userId}`
+                `/api/admin/users/${userId}`,
+                {
+                    credentials: "include"
+                }
             );
 
+
         const data =
-            await response.json();
+            await getJson(response);
 
 
-        if (!response.ok || !data.success) {
+        if (
+            !response.ok ||
+            !data.success
+        ) {
 
             throw new Error(
                 data.message ||
@@ -617,7 +1142,9 @@
         }
 
 
-        const users = data.users;
+        const users =
+            data.users || [];
+
 
         const table =
             document.getElementById(
@@ -641,79 +1168,110 @@
 
 
         table.innerHTML =
-            users.map(user => `
+            users.map(user => {
 
-                <tr>
+                const isAdmin =
+                    Number(user.is_admin) === 1;
 
-                    <td>
-                        ${escapeHtml(user.id)}
-                    </td>
 
-                    <td>
-                        ${escapeHtml(user.name)}
-                    </td>
+                const kyc =
+                    user.kyc_status ||
+                    "pending";
 
-                    <td>
-                        ${escapeHtml(user.email)}
-                    </td>
 
-                    <td>
-                        ${escapeHtml(user.phone)}
-                    </td>
+                return `
 
-                    <td>
-                        ${formatMoney(user.balance)}
-                    </td>
+                    <tr>
 
-                    <td>
+                        <td>
+                            ${escapeHtml(user.id)}
+                        </td>
 
-                        <span class="badge ${
-                            user.kyc_status === "approved"
-                                ? "badge-success"
-                                : "badge-pending"
-                        }">
+                        <td>
+                            ${escapeHtml(user.name)}
+                        </td>
 
-                            ${escapeHtml(
-                                user.kyc_status || "pending"
-                            )}
+                        <td>
+                            ${escapeHtml(user.email)}
+                        </td>
 
-                        </span>
+                        <td>
+                            ${escapeHtml(user.phone)}
+                        </td>
 
-                    </td>
+                        <td>
+                            ${formatMoney(user.balance)}
+                        </td>
 
-                    <td>
+                        <td>
 
-                        ${
-                            Number(user.is_admin) === 1
-                                ? `<span class="badge badge-admin">Yes</span>`
-                                : "No"
-                        }
+                            <span class="badge ${
+                                kyc.toLowerCase() === "approved"
+                                    ? "badge-success"
+                                    : "badge-pending"
+                            }">
 
-                    </td>
+                                ${escapeHtml(kyc)}
 
-                </tr>
+                            </span>
 
-            `).join("");
+                        </td>
+
+                        <td>
+
+                            ${
+                                isAdmin
+                                    ? `<span class="badge badge-admin">Yes</span>`
+                                    : "No"
+                            }
+
+                        </td>
+
+                    </tr>
+
+                `;
+
+            }).join("");
 
     }
 
 
-    // =========================
+    // =====================================================
     // LOAD TRANSACTIONS
-    // =========================
+    // =====================================================
 
-    async function loadTransactions(userId) {
+    async function loadTransactions(userId = null) {
+
+        if (!userId) {
+
+            const user =
+                getStoredUser();
+
+            if (!user) return;
+
+            userId =
+                user.id;
+
+        }
+
 
         const response =
             await fetch(
-                `/api/admin/transactions/${userId}`
+                `/api/admin/transactions/${userId}`,
+                {
+                    credentials: "include"
+                }
             );
 
+
         const data =
-            await response.json();
+            await getJson(response);
 
 
-        if (!response.ok || !data.success) {
+        if (
+            !response.ok ||
+            !data.success
+        ) {
 
             throw new Error(
                 data.message ||
@@ -724,7 +1282,8 @@
 
 
         const transactions =
-            data.transactions;
+            data.transactions || [];
+
 
         const table =
             document.getElementById(
@@ -748,84 +1307,671 @@
 
 
         table.innerHTML =
-            transactions.map(transaction => `
+            transactions.map(transaction => {
 
-                <tr>
+                const status =
+                    String(
+                        transaction.status ||
+                        ""
+                    ).toLowerCase();
 
-                    <td>
-                        ${escapeHtml(transaction.id)}
-                    </td>
 
-                    <td>
-                        ${escapeHtml(
-                            transaction.user_name ||
-                            "Unknown User"
-                        )}
-                    </td>
+                return `
 
-                    <td>
-                        ${escapeHtml(
-                            transaction.user_email ||
-                            "-"
-                        )}
-                    </td>
+                    <tr>
 
-                    <td>
-                        ${escapeHtml(
-                            transaction.type
-                        )}
-                    </td>
-
-                    <td>
-                        ${formatMoney(
-                            transaction.amount
-                        )}
-                    </td>
-
-                    <td>
-
-                        <span class="badge ${
-                            transaction.status === "successful"
-                                ? "badge-success"
-                                : "badge-pending"
-                        }">
-
+                        <td>
                             ${escapeHtml(
-                                transaction.status
+                                transaction.id
                             )}
+                        </td>
 
-                        </span>
+                        <td>
+                            ${escapeHtml(
+                                transaction.user_name ||
+                                "Unknown User"
+                            )}
+                        </td>
 
-                    </td>
+                        <td>
+                            ${escapeHtml(
+                                transaction.user_email ||
+                                "-"
+                            )}
+                        </td>
 
-                    <td>
-                        ${escapeHtml(
-                            transaction.reference
-                        )}
-                    </td>
+                        <td>
+                            ${escapeHtml(
+                                transaction.type ||
+                                "-"
+                            )}
+                        </td>
 
-                    <td>
-                        ${escapeHtml(
-                            transaction.description
-                        )}
-                    </td>
+                        <td>
+                            ${formatMoney(
+                                transaction.amount
+                            )}
+                        </td>
 
-                    <td>
-                        ${escapeHtml(
-                            transaction.created_at
-                        )}
-                    </td>
+                        <td>
 
-                </tr>
+                            <span class="badge ${
+                                status === "successful" ||
+                                status === "success"
+                                    ? "badge-success"
+                                    : "badge-pending"
+                            }">
 
-            `).join("");
+                                ${escapeHtml(
+                                    transaction.status ||
+                                    "pending"
+                                )}
+
+                            </span>
+
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                transaction.reference ||
+                                "-"
+                            )}
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                transaction.description ||
+                                "-"
+                            )}
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                transaction.created_at ||
+                                "-"
+                            )}
+                        </td>
+
+                    </tr>
+
+                `;
+
+            }).join("");
 
     }
 
 
-    // =========================
-    // START
-    // =========================
+    // =====================================================
+    // LOAD DATA PLANS
+    // =====================================================
+
+    async function loadDataPlans() {
+
+        const table =
+            document.getElementById(
+                "plansTable"
+            );
+
+
+        table.innerHTML = `
+            <tr>
+                <td colspan="7" class="empty">
+                    Loading data plans...
+                </td>
+            </tr>
+        `;
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/data-plans",
+                    {
+                        credentials: "include"
+                    }
+                );
+
+
+            const data =
+                await getJson(response);
+
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+
+                throw new Error(
+                    data.message ||
+                    "Could not load data plans."
+                );
+
+            }
+
+
+            const plans =
+                data.plans || [];
+
+
+            if (!plans.length) {
+
+                table.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty">
+                            No data plans found.
+                            Click "Sync WiseSub Plans" above.
+                        </td>
+                    </tr>
+                `;
+
+                return;
+
+            }
+
+
+            table.innerHTML =
+                plans.map(plan => {
+
+                    const network =
+                        String(
+                            plan.network ||
+                            ""
+                        ).toLowerCase();
+
+
+                    let networkClass = "";
+
+
+                    if (
+                        network.includes("mtn")
+                    ) {
+                        networkClass =
+                            "network-mtn";
+                    }
+
+                    else if (
+                        network.includes("airtel")
+                    ) {
+                        networkClass =
+                            "network-airtel";
+                    }
+
+                    else if (
+                        network.includes("glo")
+                    ) {
+                        networkClass =
+                            "network-glo";
+                    }
+
+                    else if (
+                        network.includes("9mobile") ||
+                        network.includes("etisalat")
+                    ) {
+                        networkClass =
+                            "network-9mobile";
+                    }
+
+
+                    const active =
+                        plan.is_active === undefined
+                            ? true
+                            : Number(plan.is_active) === 1;
+
+
+                    const providerCost =
+                        plan.provider_price ??
+                        plan.provider_cost ??
+                        plan.cost ??
+                        0;
+
+
+                    const sellingPrice =
+                        plan.price ??
+                        plan.selling_price ??
+                        0;
+
+
+                    return `
+
+                        <tr>
+
+                            <td>
+                                ${escapeHtml(
+                                    plan.id
+                                )}
+                            </td>
+
+                            <td>
+
+                                <span class="badge ${networkClass}">
+
+                                    ${escapeHtml(
+                                        plan.network ||
+                                        "-"
+                                    )}
+
+                                </span>
+
+                            </td>
+
+                            <td>
+                                ${escapeHtml(
+                                    plan.plan_name ||
+                                    plan.name ||
+                                    plan.description ||
+                                    "-"
+                                )}
+                            </td>
+
+                            <td>
+                                ${escapeHtml(
+                                    plan.validity ||
+                                    "-"
+                                )}
+                            </td>
+
+                            <td>
+                                ${formatMoney(
+                                    providerCost
+                                )}
+                            </td>
+
+                            <td class="price-cell">
+                                ${formatMoney(
+                                    sellingPrice
+                                )}
+                            </td>
+
+                            <td>
+
+                                ${
+                                    active
+                                        ? `<span class="badge badge-success">Active</span>`
+                                        : `<span class="badge badge-inactive">Inactive</span>`
+                                }
+
+                            </td>
+
+                        </tr>
+
+                    `;
+
+                }).join("");
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            table.innerHTML = `
+                <tr>
+                    <td colspan="7" class="empty danger-text">
+                        ${escapeHtml(
+                            error.message ||
+                            "Could not load data plans."
+                        )}
+                    </td>
+                </tr>
+            `;
+
+        }
+
+    }
+
+
+    // =====================================================
+    // LOAD MARKUP
+    // =====================================================
+
+    async function loadMarkup() {
+
+        const element =
+            document.getElementById(
+                "markupPercent"
+            );
+
+
+        /*
+         * The admin pricing endpoint may exist in the server.
+         * We try it first.
+         */
+
+        try {
+
+            const user =
+                getStoredUser();
+
+
+            if (!user) {
+                return;
+            }
+
+
+            const response =
+                await fetch(
+                    `/api/admin/pricing/${user.id}`,
+                    {
+                        credentials: "include"
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                element.textContent =
+                    "Configured in .env";
+
+                return;
+
+            }
+
+
+            const data =
+                await getJson(response);
+
+
+            if (
+                data.success &&
+                data.markupPercent !== undefined
+            ) {
+
+                element.textContent =
+                    Number(
+                        data.markupPercent
+                    ).toFixed(2) + "%";
+
+                return;
+
+            }
+
+
+            if (
+                data.pricing &&
+                data.pricing.markupPercent !== undefined
+            ) {
+
+                element.textContent =
+                    Number(
+                        data.pricing.markupPercent
+                    ).toFixed(2) + "%";
+
+                return;
+
+            }
+
+
+            element.textContent =
+                "Configured in .env";
+
+        }
+
+        catch (error) {
+
+            console.log(
+                "Could not load markup endpoint:",
+                error.message
+            );
+
+            element.textContent =
+                "Configured in .env";
+
+        }
+
+    }
+
+
+    // =====================================================
+    // WISESUB SYNC
+    // =====================================================
+
+    async function syncWiseSub() {
+
+        const button =
+            document.getElementById(
+                "syncButton"
+            );
+
+
+        const originalText =
+            button.innerHTML;
+
+
+        button.disabled = true;
+
+        button.innerHTML =
+            "⏳ Syncing...";
+
+
+        hideMessage();
+
+
+        const resultBox =
+            document.getElementById(
+                "syncResult"
+            );
+
+
+        try {
+
+            const user =
+                getStoredUser();
+
+
+            if (
+                !user ||
+                !user.id
+            ) {
+
+                throw new Error(
+                    "Your admin session could not be found. Please login again."
+                );
+
+            }
+
+
+            const response =
+                await fetch(
+                    "/api/admin/sync-wisesub",
+                    {
+                        method: "POST",
+                        credentials: "include",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+                            userId: user.id
+                        })
+                    }
+                );
+
+
+            const data =
+                await getJson(response);
+
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+
+                throw new Error(
+                    data.message ||
+                    "WiseSub synchronization failed."
+                );
+
+            }
+
+
+            const result =
+                data.result ||
+                data.sync ||
+                data;
+
+
+            document.getElementById(
+                "syncReceived"
+            ).textContent =
+                Number(
+                    result.received ||
+                    result.total ||
+                    0
+                );
+
+
+            document.getElementById(
+                "syncAdded"
+            ).textContent =
+                Number(
+                    result.added ||
+                    0
+                );
+
+
+            document.getElementById(
+                "syncUpdated"
+            ).textContent =
+                Number(
+                    result.updated ||
+                    0
+                );
+
+
+            document.getElementById(
+                "syncSkipped"
+            ).textContent =
+                Number(
+                    result.skipped ||
+                    0
+                );
+
+
+            document.getElementById(
+                "syncFailed"
+            ).textContent =
+                Number(
+                    result.failed ||
+                    0
+                );
+
+
+            resultBox.style.display =
+                "block";
+
+
+            showMessage(
+                data.message ||
+                "WiseSub plans synchronized successfully.",
+                "success"
+            );
+
+
+            // Reload plans after synchronization
+
+            await loadDataPlans();
+
+
+            // Reload stats too
+
+            await loadStats(user.id);
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "WiseSub sync error:",
+                error
+            );
+
+
+            showMessage(
+                error.message ||
+                "WiseSub synchronization failed.",
+                "error"
+            );
+
+        }
+
+        finally {
+
+            button.disabled = false;
+
+            button.innerHTML =
+                originalText;
+
+        }
+
+    }
+
+
+    // =====================================================
+    // LOAD EVERYTHING
+    // =====================================================
+
+    async function loadAdmin() {
+
+        try {
+
+            hideMessage();
+
+
+            const user =
+                await verifyAdmin();
+
+
+            if (!user) {
+                return;
+            }
+
+
+            await Promise.all([
+
+                loadStats(
+                    user.id
+                ),
+
+                loadUsers(
+                    user.id
+                ),
+
+                loadTransactions(
+                    user.id
+                ),
+
+                loadDataPlans(),
+
+                loadMarkup()
+
+            ]);
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Admin loading error:",
+                error
+            );
+
+
+            showMessage(
+                error.message ||
+                "Could not load the admin panel.",
+                "error"
+            );
+
+        }
+
+    }
+
+
+    // =====================================================
+    // START ADMIN PANEL
+    // =====================================================
 
     loadAdmin();
 

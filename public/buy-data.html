@@ -69,6 +69,11 @@
             font-size: 16px;
         }
 
+        input:focus {
+            outline: none;
+            border-color: #0b7a3b;
+        }
+
         .pin-input {
             letter-spacing: 8px;
             text-align: center;
@@ -98,6 +103,10 @@
             font-weight: bold;
         }
 
+        .network:hover {
+            border-color: #0b7a3b;
+        }
+
         .network.active {
             border-color: #0b7a3b;
             background: #e8f7ee;
@@ -117,10 +126,12 @@
             border-radius: 10px;
             cursor: pointer;
             text-align: center;
+            transition: 0.2s;
         }
 
         .plan:hover {
             border-color: #0b7a3b;
+            transform: translateY(-1px);
         }
 
         .plan.active {
@@ -140,16 +151,48 @@
             font-size: 18px;
         }
 
+        .validity {
+            display: block;
+            margin-top: 6px;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
         .loading {
             text-align: center;
             padding: 25px;
             color: #6b7280;
+            grid-column: 1 / -1;
         }
 
         .empty {
             text-align: center;
             padding: 25px;
             color: #6b7280;
+            grid-column: 1 / -1;
+            background: #f9fafb;
+            border-radius: 10px;
+        }
+
+        .error-box {
+            text-align: center;
+            padding: 20px;
+            color: #991b1b;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            grid-column: 1 / -1;
+        }
+
+        .retry-btn {
+            margin-top: 12px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #0b7a3b;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
         }
 
         .summary {
@@ -158,6 +201,11 @@
             border-radius: 10px;
             margin-top: 25px;
             line-height: 1.8;
+        }
+
+        .summary strong:first-child {
+            display: block;
+            margin-bottom: 5px;
         }
 
         .buy-btn {
@@ -201,6 +249,12 @@
             color: #991b1b;
         }
 
+        .info {
+            display: block;
+            background: #eff6ff;
+            color: #1e40af;
+        }
+
         .back {
             display: inline-block;
             margin-bottom: 20px;
@@ -209,7 +263,23 @@
             font-weight: bold;
         }
 
+        .status {
+            font-size: 13px;
+            margin-top: 8px;
+            color: #6b7280;
+            text-align: center;
+        }
+
         @media (max-width: 600px) {
+            .container {
+                margin: 15px auto;
+                padding: 12px;
+            }
+
+            .card {
+                padding: 18px;
+            }
+
             .networks {
                 grid-template-columns: repeat(2, 1fr);
             }
@@ -242,9 +312,7 @@
             <span id="balance">₦0</span>
         </div>
 
-        <!-- PHONE -->
-
-        <label>Phone Number</label>
+        <label for="phone">Phone Number</label>
 
         <input
             type="tel"
@@ -252,9 +320,8 @@
             placeholder="08012345678"
             maxlength="11"
             inputmode="numeric"
+            autocomplete="tel"
         >
-
-        <!-- NETWORK -->
 
         <label>Select Network</label>
 
@@ -298,20 +365,17 @@
 
         </div>
 
-        <!-- DATA PLANS -->
-
         <label>Select Data Plan</label>
 
-        <div
-            class="plans"
-            id="plans"
-        >
+        <div class="plans" id="plans">
+
             <div class="loading">
                 Loading data plans...
             </div>
+
         </div>
 
-        <!-- PURCHASE PIN -->
+        <div id="planStatus" class="status"></div>
 
         <label style="margin-top: 25px;">
             Purchase PIN
@@ -330,8 +394,6 @@
         <div class="pin-note">
             Enter your 4-digit Purchase PIN to authorize this purchase.
         </div>
-
-        <!-- SUMMARY -->
 
         <div class="summary">
 
@@ -359,8 +421,6 @@
 
         </div>
 
-        <!-- BUY BUTTON -->
-
         <button
             type="button"
             id="buyButton"
@@ -371,12 +431,7 @@
             Select a Data Plan
         </button>
 
-        <!-- MESSAGE -->
-
-        <div
-            id="message"
-            class="message"
-        ></div>
+        <div id="message" class="message"></div>
 
     </div>
 
@@ -384,685 +439,1215 @@
 
 <script>
 
-    // ==========================================
-    // LOGIN / SESSION CHECK
-    // ==========================================
+let user = null;
 
-    const savedUser =
-        localStorage.getItem("cheapdataUser");
+let selectedNetwork = "MTN";
+let selectedPlan = "";
+let selectedPrice = 0;
+let selectedPlanId = null;
 
-    if (!savedUser) {
-        window.location.href = "/login.html";
-    }
+let allPlans = [];
 
-    let user = null;
+
+// =========================================================
+// MONEY
+// =========================================================
+
+function formatMoney(amount) {
+
+    return `₦${Number(amount || 0).toLocaleString()}`;
+
+}
+
+
+// =========================================================
+// GET SAVED USER
+// =========================================================
+
+function getSavedUser() {
 
     try {
 
-        user = JSON.parse(savedUser);
+        const saved =
+            localStorage.getItem("cheapdataUser");
+
+        if (!saved) {
+            return null;
+        }
+
+        const parsed =
+            JSON.parse(saved);
+
+        if (
+            parsed &&
+            parsed.id
+        ) {
+
+            return parsed;
+        }
 
     } catch (error) {
 
-        localStorage.removeItem("cheapdataUser");
-        window.location.href = "/login.html";
+        console.error(
+            "Saved user error:",
+            error
+        );
+
     }
 
-
-    // ==========================================
-    // VARIABLES
-    // ==========================================
-
-    let selectedNetwork = "MTN";
-    let selectedPlan = "";
-    let selectedPrice = 0;
-    let selectedPlanId = null;
-
-    let allPlans = [];
+    return null;
+}
 
 
-    // ==========================================
-    // LOAD SESSION
-    // ==========================================
+// =========================================================
+// UPDATE USER DISPLAY
+// =========================================================
 
-    async function checkSession() {
+function updateUserDisplay() {
+
+    if (!user) {
+        return;
+    }
+
+    localStorage.setItem(
+        "cheapdataUser",
+        JSON.stringify(user)
+    );
+
+    document.getElementById(
+        "balance"
+    ).textContent =
+        formatMoney(user.balance);
+
+}
+
+
+// =========================================================
+// SESSION
+// =========================================================
+
+async function checkSession() {
+
+    /*
+     * First try the server session.
+     */
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/session",
+                {
+                    method: "GET",
+                    credentials: "include",
+                    cache: "no-store"
+                }
+            );
+
+        let data = {};
 
         try {
 
-            const response =
-                await fetch("/api/session");
-
-            const data =
+            data =
                 await response.json();
-
-            if (
-                !response.ok ||
-                !data.success ||
-                !data.authenticated
-            ) {
-
-                localStorage.removeItem(
-                    "cheapdataUser"
-                );
-
-                window.location.href =
-                    "/login.html";
-
-                return false;
-            }
-
-            user = data.user;
-
-            localStorage.setItem(
-                "cheapdataUser",
-                JSON.stringify(user)
-            );
-
-            return true;
 
         } catch (error) {
 
-            console.error(
-                "Session error:",
-                error
+            data = {};
+
+        }
+
+        console.log(
+            "SESSION CHECK:",
+            response.status,
+            data
+        );
+
+
+        /*
+         * Normal successful session response.
+         */
+
+        if (
+            response.ok &&
+            data.loggedIn === true &&
+            data.user
+        ) {
+
+            user =
+                data.user;
+
+            updateUserDisplay();
+
+            return true;
+        }
+
+
+        /*
+         * If server explicitly says the session
+         * is not logged in, try the saved user.
+         *
+         * We do NOT immediately redirect.
+         */
+
+        if (
+            data.loggedIn === false
+        ) {
+
+            const savedUser =
+                getSavedUser();
+
+            if (
+                savedUser &&
+                savedUser.id
+            ) {
+
+                user =
+                    savedUser;
+
+                updateUserDisplay();
+
+                /*
+                 * Verify the saved user against
+                 * the authenticated server session.
+                 */
+
+                const verify =
+                    await fetch(
+                        `/api/user/${savedUser.id}`,
+                        {
+                            method: "GET",
+                            credentials: "include",
+                            cache: "no-store"
+                        }
+                    );
+
+                if (
+                    verify.ok
+                ) {
+
+                    const verifyData =
+                        await verify.json();
+
+                    if (
+                        verifyData.success &&
+                        verifyData.user
+                    ) {
+
+                        user =
+                            verifyData.user;
+
+                        updateUserDisplay();
+
+                        return true;
+                    }
+                }
+            }
+
+            /*
+             * Only now do we consider the user
+             * genuinely logged out.
+             */
+
+            window.location.href =
+                "/login.html";
+
+            return false;
+        }
+
+
+        /*
+         * If /api/session returns 404 or some
+         * unexpected response, use saved login.
+         */
+
+        const savedUser =
+            getSavedUser();
+
+        if (
+            savedUser &&
+            savedUser.id
+        ) {
+
+            user =
+                savedUser;
+
+            updateUserDisplay();
+
+            try {
+
+                const verify =
+                    await fetch(
+                        `/api/user/${savedUser.id}`,
+                        {
+                            method: "GET",
+                            credentials: "include",
+                            cache: "no-store"
+                        }
+                    );
+
+                if (
+                    verify.ok
+                ) {
+
+                    const verifyData =
+                        await verify.json();
+
+                    if (
+                        verifyData.success &&
+                        verifyData.user
+                    ) {
+
+                        user =
+                            verifyData.user;
+
+                        updateUserDisplay();
+
+                        return true;
+                    }
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "Saved user verification error:",
+                    error
+                );
+
+            }
+
+        }
+
+
+        showMessage(
+            "Unable to verify your login session. Please refresh the page.",
+            "error"
+        );
+
+        return false;
+
+    } catch (error) {
+
+        console.error(
+            "Session verification error:",
+            error
+        );
+
+
+        /*
+         * Network error:
+         * don't immediately kick the user to login.
+         */
+
+        const savedUser =
+            getSavedUser();
+
+        if (
+            savedUser &&
+            savedUser.id
+        ) {
+
+            user =
+                savedUser;
+
+            updateUserDisplay();
+
+            return true;
+        }
+
+
+        showMessage(
+            "Unable to connect to the server. Please make sure CheapData is running.",
+            "error"
+        );
+
+        return false;
+    }
+}
+
+
+// =========================================================
+// LOAD BALANCE
+// =========================================================
+
+async function loadBalance() {
+
+    if (
+        !user ||
+        !user.id
+    ) {
+
+        return false;
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+                `/api/user/${user.id}`,
+                {
+                    method: "GET",
+                    credentials: "include",
+                    cache: "no-store"
+                }
+            );
+
+
+        let data = {};
+
+        try {
+
+            data =
+                await response.json();
+
+        } catch (error) {
+
+            data = {};
+
+        }
+
+
+        console.log(
+            "BALANCE:",
+            response.status,
+            data
+        );
+
+
+        /*
+         * Only redirect if the server explicitly
+         * confirms that authentication failed.
+         */
+
+        if (
+            response.status === 401 ||
+            response.status === 403
+        ) {
+
+            showMessage(
+                "Your login session has expired. Please log in again.",
+                "error"
+            );
+
+            setTimeout(
+                () => {
+                    window.location.href =
+                        "/login.html";
+                },
+                1500
             );
 
             return false;
         }
+
+
+        if (
+            response.ok &&
+            data.success &&
+            data.user
+        ) {
+
+            user =
+                data.user;
+
+            updateUserDisplay();
+
+            return true;
+        }
+
+
+        return false;
+
+    } catch (error) {
+
+        console.error(
+            "Balance error:",
+            error
+        );
+
+        return false;
     }
+}
 
 
-    // ==========================================
-    // LOAD BALANCE
-    // ==========================================
+// =========================================================
+// LOAD DATA PLANS
+// =========================================================
 
-    async function loadBalance() {
+async function loadDataPlans() {
+
+    const plansContainer =
+        document.getElementById("plans");
+
+    const status =
+        document.getElementById("planStatus");
+
+
+    plansContainer.innerHTML = `
+        <div class="loading">
+            Loading data plans...
+        </div>
+    `;
+
+
+    status.textContent = "";
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/data-plans",
+                {
+                    method: "GET",
+                    credentials: "include",
+                    cache: "no-store"
+                }
+            );
+
+
+        let data = {};
 
         try {
 
-            const response =
-                await fetch(
-                    `/api/user/${user.id}`
-                );
-
-            const data =
+            data =
                 await response.json();
-
-            if (
-                response.status === 401 ||
-                response.status === 403
-            ) {
-
-                localStorage.removeItem(
-                    "cheapdataUser"
-                );
-
-                window.location.href =
-                    "/login.html";
-
-                return;
-            }
-
-            if (data.success) {
-
-                user = data.user;
-
-                localStorage.setItem(
-                    "cheapdataUser",
-                    JSON.stringify(user)
-                );
-
-                document.getElementById(
-                    "balance"
-                ).textContent =
-                    `₦${Number(user.balance).toLocaleString()}`;
-            }
 
         } catch (error) {
 
-            console.error(
-                "Balance error:",
-                error
-            );
+            data = {};
+
         }
-    }
 
 
-    // ==========================================
-    // LOAD DATA PLANS FROM DATABASE
-    // ==========================================
+        console.log(
+            "DATA PLANS:",
+            response.status,
+            data
+        );
 
-    async function loadDataPlans() {
 
-        const plansContainer =
-            document.getElementById("plans");
+        /*
+         * Do NOT redirect merely because
+         * the data-plan request failed.
+         */
 
-        try {
+        if (
+            response.status === 401 ||
+            response.status === 403
+        ) {
 
-            const response =
-                await fetch("/api/data-plans");
-
-            const data =
-                await response.json();
-
-            if (
-                response.status === 401 ||
-                response.status === 403
-            ) {
-
-                localStorage.removeItem(
-                    "cheapdataUser"
-                );
-
-                window.location.href =
-                    "/login.html";
-
-                return;
-            }
-
-            if (
-                !response.ok ||
-                !data.success
-            ) {
-
-                plansContainer.innerHTML = `
-                    <div class="empty">
-                        Unable to load data plans.
-                    </div>
-                `;
-
-                return;
-            }
-
-            allPlans = data.plans || [];
-
-            renderPlans();
-
-        } catch (error) {
-
-            console.error(
-                "Plans error:",
-                error
+            showMessage(
+                "Your login session has expired. Please log in again.",
+                "error"
             );
 
-            plansContainer.innerHTML = `
-                <div class="empty">
-                    Unable to connect to the server.
-                </div>
-            `;
-        }
-    }
-
-
-    // ==========================================
-    // DISPLAY PLANS FOR SELECTED NETWORK
-    // ==========================================
-
-    function renderPlans() {
-
-        const plansContainer =
-            document.getElementById("plans");
-
-        const networkPlans =
-            allPlans.filter(
-                plan =>
-                    plan.network === selectedNetwork
+            setTimeout(
+                () => {
+                    window.location.href =
+                        "/login.html";
+                },
+                1500
             );
-
-        plansContainer.innerHTML = "";
-
-        if (networkPlans.length === 0) {
-
-            plansContainer.innerHTML = `
-                <div class="empty">
-                    No data plans available for ${selectedNetwork}.
-                </div>
-            `;
-
-            selectedPlan = "";
-            selectedPrice = 0;
-            selectedPlanId = null;
-
-            updateSummary();
 
             return;
         }
 
-        networkPlans.forEach(plan => {
+
+        if (!response.ok) {
+
+            plansContainer.innerHTML = `
+                <div class="error-box">
+
+                    <strong>
+                        Unable to load data plans.
+                    </strong>
+
+                    <br><br>
+
+                    Server returned error ${response.status}.
+
+                    <br>
+
+                    <button
+                        type="button"
+                        class="retry-btn"
+                        onclick="loadDataPlans()"
+                    >
+                        Try Again
+                    </button>
+
+                </div>
+            `;
+
+            return;
+        }
+
+
+        if (!data.success) {
+
+            plansContainer.innerHTML = `
+                <div class="error-box">
+
+                    <strong>
+                        ${escapeHTML(
+                            data.message ||
+                            "Unable to load data plans."
+                        )}
+                    </strong>
+
+                    <br>
+
+                    <button
+                        type="button"
+                        class="retry-btn"
+                        onclick="loadDataPlans()"
+                    >
+                        Try Again
+                    </button>
+
+                </div>
+            `;
+
+            return;
+        }
+
+
+        allPlans =
+            Array.isArray(data.plans)
+                ? data.plans
+                : [];
+
+
+        if (
+            allPlans.length === 0
+        ) {
+
+            plansContainer.innerHTML = `
+                <div class="empty">
+
+                    <strong>
+                        No data plans are available yet.
+                    </strong>
+
+                    <br><br>
+
+                    Your account is working correctly,
+                    but no active WiseSub plans have been
+                    synchronized yet.
+
+                    <br><br>
+
+                    Please synchronize the WiseSub plans
+                    from the admin panel.
+
+                </div>
+            `;
+
+            status.textContent =
+                "0 data plans loaded.";
+
+            clearPlanSelection();
+
+            return;
+        }
+
+
+        status.textContent =
+            `${allPlans.length} data plan(s) available.`;
+
+        renderPlans();
+
+    } catch (error) {
+
+        console.error(
+            "Plans loading error:",
+            error
+        );
+
+
+        plansContainer.innerHTML = `
+            <div class="error-box">
+
+                <strong>
+                    Unable to connect to the server.
+                </strong>
+
+                <br><br>
+
+                Please make sure CheapData is running.
+
+                <br>
+
+                <button
+                    type="button"
+                    class="retry-btn"
+                    onclick="loadDataPlans()"
+                >
+                    Try Again
+                </button>
+
+            </div>
+        `;
+    }
+}
+
+
+// =========================================================
+// RENDER PLANS
+// =========================================================
+
+function renderPlans() {
+
+    const plansContainer =
+        document.getElementById("plans");
+
+
+    const networkPlans =
+        allPlans.filter(
+            plan =>
+                String(plan.network).toLowerCase() ===
+                String(selectedNetwork).toLowerCase()
+        );
+
+
+    plansContainer.innerHTML = "";
+
+
+    if (
+        networkPlans.length === 0
+    ) {
+
+        plansContainer.innerHTML = `
+            <div class="empty">
+
+                No data plans available for
+                <strong>
+                    ${escapeHTML(selectedNetwork)}
+                </strong>.
+
+            </div>
+        `;
+
+        clearPlanSelection();
+
+        return;
+    }
+
+
+    networkPlans.sort(
+        (a, b) =>
+            Number(a.selling_price) -
+            Number(b.selling_price)
+    );
+
+
+    networkPlans.forEach(
+        plan => {
 
             const button =
                 document.createElement("button");
 
-            button.type = "button";
 
-            button.className = "plan";
+            button.type =
+                "button";
+
+
+            button.className =
+                "plan";
+
+
+            let validityHTML = "";
+
+            if (
+                plan.validity
+            ) {
+
+                validityHTML = `
+                    <span class="validity">
+                        ${escapeHTML(plan.validity)}
+                    </span>
+                `;
+            }
+
 
             button.innerHTML = `
+
                 <strong>
-                    ${escapeHTML(plan.data_size)}
+                    ${escapeHTML(
+                        plan.data_size ||
+                        plan.plan_name ||
+                        "Data"
+                    )}
                 </strong>
 
                 <span class="price">
-                    ₦${Number(
+                    ${formatMoney(
                         plan.selling_price
-                    ).toLocaleString()}
+                    )}
                 </span>
+
+                ${validityHTML}
+
             `;
 
-            button.onclick = function () {
 
-                selectPlan(
-                    plan,
-                    button
-                );
-            };
+            button.onclick =
+                function () {
 
-            plansContainer.appendChild(button);
-        });
+                    selectPlan(
+                        plan,
+                        button
+                    );
 
-        // Automatically select the first plan
+                };
 
-        if (networkPlans.length > 0) {
 
-            const firstPlan =
-                networkPlans[0];
-
-            const firstButton =
-                plansContainer.querySelector(
-                    ".plan"
-                );
-
-            selectPlan(
-                firstPlan,
-                firstButton
+            plansContainer.appendChild(
+                button
             );
+
         }
-    }
+    );
 
 
-    // ==========================================
-    // SELECT NETWORK
-    // ==========================================
-
-    function selectNetwork(
-        network,
-        button
-    ) {
-
-        selectedNetwork = network;
-
-        document
-            .querySelectorAll(".network")
-            .forEach(btn => {
-
-                btn.classList.remove(
-                    "active"
-                );
-            });
-
-        button.classList.add("active");
-
-        document.getElementById(
-            "summaryNetwork"
-        ).textContent = network;
-
-        // Clear old selection
-
-        selectedPlan = "";
-        selectedPrice = 0;
-        selectedPlanId = null;
-
-        document.getElementById(
-            "summaryPlan"
-        ).textContent =
-            "Not selected";
-
-        document.getElementById(
-            "summaryAmount"
-        ).textContent =
-            "₦0";
-
-        const buyButton =
-            document.getElementById(
-                "buyButton"
-            );
-
-        buyButton.disabled = true;
-
-        buyButton.textContent =
-            "Select a Data Plan";
-
-        // Load plans for this network
-
-        renderPlans();
-    }
+    const firstPlan =
+        networkPlans[0];
 
 
-    // ==========================================
-    // SELECT PLAN
-    // ==========================================
-
-    function selectPlan(
-        plan,
-        button
-    ) {
-
-        selectedPlan =
-            plan.plan_name;
-
-        selectedPrice =
-            Number(plan.selling_price);
-
-        selectedPlanId =
-            Number(plan.id);
-
-        document
-            .querySelectorAll(".plan")
-            .forEach(btn => {
-
-                btn.classList.remove(
-                    "active"
-                );
-            });
-
-        button.classList.add("active");
-
-        document.getElementById(
-            "summaryPlan"
-        ).textContent =
-            plan.data_size;
-
-        document.getElementById(
-            "summaryAmount"
-        ).textContent =
-            `₦${selectedPrice.toLocaleString()}`;
-
-        const buyButton =
-            document.getElementById(
-                "buyButton"
-            );
-
-        buyButton.disabled = false;
-
-        buyButton.textContent =
-            `Buy ${plan.data_size} for ₦${selectedPrice.toLocaleString()}`;
-
-        updatePhoneSummary();
-    }
-
-
-    // ==========================================
-    // PHONE SUMMARY
-    // ==========================================
-
-    document
-        .getElementById("phone")
-        .addEventListener(
-            "input",
-            updatePhoneSummary
+    const firstButton =
+        plansContainer.querySelector(
+            ".plan"
         );
 
-    function updatePhoneSummary() {
 
-        const phone =
-            document.getElementById(
-                "phone"
-            ).value;
+    if (
+        firstPlan &&
+        firstButton
+    ) {
 
-        document.getElementById(
-            "summaryPhone"
-        ).textContent =
-            phone || "Not entered";
+        selectPlan(
+            firstPlan,
+            firstButton
+        );
     }
+}
 
 
-    // ==========================================
-    // PIN INPUT
-    // ==========================================
+// =========================================================
+// CLEAR PLAN
+// =========================================================
+
+function clearPlanSelection() {
+
+    selectedPlan = "";
+    selectedPrice = 0;
+    selectedPlanId = null;
+
+
+    document.getElementById(
+        "summaryPlan"
+    ).textContent =
+        "Not selected";
+
+
+    document.getElementById(
+        "summaryAmount"
+    ).textContent =
+        "₦0";
+
+
+    const buyButton =
+        document.getElementById(
+            "buyButton"
+        );
+
+
+    buyButton.disabled =
+        true;
+
+
+    buyButton.textContent =
+        "Select a Data Plan";
+}
+
+
+// =========================================================
+// SELECT NETWORK
+// =========================================================
+
+function selectNetwork(
+    network,
+    button
+) {
+
+    selectedNetwork =
+        network;
+
 
     document
-        .getElementById("purchasePin")
-        .addEventListener(
-            "input",
-            function () {
+        .querySelectorAll(".network")
+        .forEach(
+            btn => {
 
-                this.value =
-                    this.value
-                        .replace(/\D/g, "")
-                        .slice(0, 4);
+                btn.classList.remove(
+                    "active"
+                );
+
             }
         );
 
 
-    // ==========================================
-    // UPDATE SUMMARY
-    // ==========================================
+    button.classList.add(
+        "active"
+    );
 
-    function updateSummary() {
 
-        document.getElementById(
-            "summaryNetwork"
-        ).textContent =
-            selectedNetwork;
+    document.getElementById(
+        "summaryNetwork"
+    ).textContent =
+        network;
 
-        document.getElementById(
-            "summaryPlan"
-        ).textContent =
-            selectedPlan || "Not selected";
 
-        document.getElementById(
-            "summaryAmount"
-        ).textContent =
-            selectedPrice
-                ? `₦${selectedPrice.toLocaleString()}`
-                : "₦0";
+    clearPlanSelection();
+
+    renderPlans();
+}
+
+
+// =========================================================
+// SELECT PLAN
+// =========================================================
+
+function selectPlan(
+    plan,
+    button
+) {
+
+    selectedPlan =
+        plan.plan_name;
+
+
+    selectedPrice =
+        Number(plan.selling_price);
+
+
+    selectedPlanId =
+        Number(plan.id);
+
+
+    document
+        .querySelectorAll(".plan")
+        .forEach(
+            btn => {
+
+                btn.classList.remove(
+                    "active"
+                );
+
+            }
+        );
+
+
+    if (button) {
+
+        button.classList.add(
+            "active"
+        );
     }
 
 
-    // ==========================================
-    // SHOW MESSAGE
-    // ==========================================
+    document.getElementById(
+        "summaryPlan"
+    ).textContent =
+        plan.data_size ||
+        plan.plan_name;
 
-    function showMessage(
-        text,
-        type
+
+    document.getElementById(
+        "summaryAmount"
+    ).textContent =
+        formatMoney(
+            selectedPrice
+        );
+
+
+    const buyButton =
+        document.getElementById(
+            "buyButton"
+        );
+
+
+    buyButton.disabled =
+        false;
+
+
+    buyButton.textContent =
+        `Buy ${
+            plan.data_size ||
+            plan.plan_name
+        } for ${
+            formatMoney(selectedPrice)
+        }`;
+
+
+    updatePhoneSummary();
+}
+
+
+// =========================================================
+// PHONE
+// =========================================================
+
+document
+    .getElementById("phone")
+    .addEventListener(
+        "input",
+        updatePhoneSummary
+    );
+
+
+function updatePhoneSummary() {
+
+    const phone =
+        document.getElementById(
+            "phone"
+        ).value.trim();
+
+
+    document.getElementById(
+        "summaryPhone"
+    ).textContent =
+        phone ||
+        "Not entered";
+}
+
+
+// =========================================================
+// PIN
+// =========================================================
+
+document
+    .getElementById("purchasePin")
+    .addEventListener(
+        "input",
+        function () {
+
+            this.value =
+                this.value
+                    .replace(/\D/g, "")
+                    .slice(0, 4);
+
+        }
+    );
+
+
+// =========================================================
+// MESSAGES
+// =========================================================
+
+function showMessage(
+    text,
+    type
+) {
+
+    const message =
+        document.getElementById(
+            "message"
+        );
+
+
+    message.textContent =
+        text;
+
+
+    message.className =
+        `message ${type}`;
+
+
+    message.style.display =
+        "block";
+}
+
+
+function hideMessage() {
+
+    const message =
+        document.getElementById(
+            "message"
+        );
+
+
+    message.textContent =
+        "";
+
+
+    message.className =
+        "message";
+
+
+    message.style.display =
+        "none";
+}
+
+
+// =========================================================
+// ESCAPE HTML
+// =========================================================
+
+function escapeHTML(value) {
+
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+// =========================================================
+// PURCHASE
+// =========================================================
+
+async function purchaseData() {
+
+    hideMessage();
+
+
+    const phone =
+        document.getElementById(
+            "phone"
+        ).value.trim();
+
+
+    const pin =
+        document.getElementById(
+            "purchasePin"
+        ).value.trim();
+
+
+    const buyButton =
+        document.getElementById(
+            "buyButton"
+        );
+
+
+    if (
+        !/^0[7-9][0-1][0-9]{8}$/.test(
+            phone
+        )
     ) {
 
-        const message =
-            document.getElementById(
-                "message"
-            );
+        showMessage(
+            "Please enter a valid Nigerian phone number.",
+            "error"
+        );
 
-        message.textContent = text;
-
-        message.className =
-            `message ${type}`;
-
-        message.style.display =
-            "block";
+        return;
     }
 
 
-    // ==========================================
-    // ESCAPE HTML
-    // ==========================================
+    if (
+        !selectedPlan ||
+        !selectedPlanId
+    ) {
 
-    function escapeHTML(value) {
+        showMessage(
+            "Please select a data plan.",
+            "error"
+        );
 
-        return String(value)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+        return;
     }
 
 
-    // ==========================================
-    // PURCHASE DATA
-    // ==========================================
+    if (
+        !/^\d{4}$/.test(pin)
+    ) {
 
-    async function purchaseData() {
+        showMessage(
+            "Please enter your 4-digit Purchase PIN.",
+            "error"
+        );
 
-        const phone =
-            document.getElementById(
-                "phone"
-            ).value.trim();
-
-        const pin =
-            document.getElementById(
-                "purchasePin"
-            ).value.trim();
-
-        const buyButton =
-            document.getElementById(
-                "buyButton"
-            );
-
-        const message =
-            document.getElementById(
-                "message"
-            );
-
-        // Clear previous message
-
-        message.className =
-            "message";
-
-        message.style.display =
-            "none";
+        return;
+    }
 
 
-        // ==========================================
-        // VALIDATE PHONE
-        // ==========================================
-
-        if (
-            !/^0[7-9][0-1][0-9]{8}$/.test(
-                phone
-            )
-        ) {
-
-            showMessage(
-                "Please enter a valid Nigerian phone number.",
-                "error"
-            );
-
-            return;
-        }
-
-
-        // ==========================================
-        // VALIDATE PLAN
-        // ==========================================
-
-        if (
-            !selectedPlan ||
-            !selectedPlanId
-        ) {
-
-            showMessage(
-                "Please select a data plan.",
-                "error"
-            );
-
-            return;
-        }
-
-
-        // ==========================================
-        // VALIDATE PIN
-        // ==========================================
-
-        if (
-            !/^\d{4}$/.test(pin)
-        ) {
-
-            showMessage(
-                "Please enter your 4-digit Purchase PIN.",
-                "error"
-            );
-
-            return;
-        }
-
-
-        // ==========================================
-        // REFRESH BALANCE
-        // ==========================================
-
+    const balanceLoaded =
         await loadBalance();
 
 
-        // ==========================================
-        // CHECK BALANCE
-        // ==========================================
+    if (!balanceLoaded || !user) {
 
-        if (
-            Number(user.balance) <
-            selectedPrice
-        ) {
+        showMessage(
+            "Unable to verify your wallet. Please refresh the page and try again.",
+            "error"
+        );
 
-            showMessage(
-                "Insufficient wallet balance.",
-                "error"
-            );
-
-            return;
-        }
+        return;
+    }
 
 
-        // ==========================================
-        // CONFIRM PURCHASE
-        // ==========================================
+    if (
+        Number(user.balance) <
+        selectedPrice
+    ) {
 
-        const confirmed =
-            confirm(
-                `Buy ${selectedPlan} ${selectedNetwork} data for ${phone} for ₦${selectedPrice.toLocaleString()}?`
-            );
+        showMessage(
+            `Insufficient wallet balance. You need ${formatMoney(selectedPrice)}.`,
+            "error"
+        );
 
-        if (!confirmed) {
-            return;
-        }
-
-
-        // ==========================================
-        // PROCESSING
-        // ==========================================
-
-        buyButton.disabled = true;
-
-        buyButton.textContent =
-            "Processing...";
+        return;
+    }
 
 
-        try {
+    const confirmed =
+        confirm(
+            `Buy ${selectedPlan} ${selectedNetwork} data for ${phone} for ${formatMoney(selectedPrice)}?`
+        );
 
-            /*
-             * IMPORTANT:
-             * The server now determines the
-             * authenticated user from the session.
-             *
-             * We do NOT send userId here.
-             */
 
-            const response =
-                await fetch(
-                    "/api/buy-data",
-                    {
-                        method: "POST",
+    if (!confirmed) {
 
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
+        return;
+    }
 
-                        body: JSON.stringify({
+
+    buyButton.disabled =
+        true;
+
+
+    buyButton.textContent =
+        "Processing...";
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/buy-data",
+                {
+                    method: "POST",
+                    credentials: "include",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body:
+                        JSON.stringify({
 
                             network:
                                 selectedNetwork,
 
                             plan:
                                 selectedPlan,
+
+                            planId:
+                                selectedPlanId,
 
                             phone:
                                 phone,
@@ -1072,144 +1657,185 @@
 
                             pin:
                                 pin
+
                         })
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            // ==========================================
-            // SESSION EXPIRED
-            // ==========================================
-
-            if (
-                response.status === 401
-            ) {
-
-                localStorage.removeItem(
-                    "cheapdataUser"
-                );
-
-                window.location.href =
-                    "/login.html";
-
-                return;
-            }
-
-
-            // ==========================================
-            // SERVER ERROR
-            // ==========================================
-
-            if (
-                !response.ok ||
-                !data.success
-            ) {
-
-                showMessage(
-                    data.message ||
-                    "Purchase failed.",
-                    "error"
-                );
-
-                buyButton.disabled = false;
-
-                buyButton.textContent =
-                    `Buy ${selectedPlan} for ₦${selectedPrice.toLocaleString()}`;
-
-                return;
-            }
-
-
-            // ==========================================
-            // UPDATE BALANCE
-            // ==========================================
-
-            if (
-                typeof data.balance !==
-                "undefined"
-            ) {
-
-                user.balance =
-                    data.balance;
-
-                localStorage.setItem(
-                    "cheapdataUser",
-                    JSON.stringify(user)
-                );
-
-                document.getElementById(
-                    "balance"
-                ).textContent =
-                    `₦${Number(
-                        data.balance
-                    ).toLocaleString()}`;
-            }
-
-
-            // ==========================================
-            // SUCCESS
-            // ==========================================
-
-            showMessage(
-                `Purchase successful! ${data.network || selectedNetwork} ${data.plan || selectedPlan} sent to ${data.phone || phone}. Reference: ${data.reference}`,
-                "success"
+                }
             );
 
 
-            buyButton.textContent =
-                "Purchase Successful";
+        let data = {};
 
+        try {
 
-            // Clear PIN
-
-            document.getElementById(
-                "purchasePin"
-            ).value = "";
-
+            data =
+                await response.json();
 
         } catch (error) {
 
-            console.error(
-                "Purchase error:",
-                error
-            );
+            data = {};
+
+        }
+
+
+        console.log(
+            "PURCHASE:",
+            response.status,
+            data
+        );
+
+
+        if (
+            response.status === 401 ||
+            response.status === 403
+        ) {
 
             showMessage(
-                "Unable to connect to the server. Please try again.",
+                "Your login session has expired. Please log in again.",
                 "error"
             );
 
-            buyButton.disabled = false;
+            setTimeout(
+                () => {
+                    window.location.href =
+                        "/login.html";
+                },
+                1500
+            );
 
-            buyButton.textContent =
-                `Buy ${selectedPlan} for ₦${selectedPrice.toLocaleString()}`;
-        }
-    }
-
-
-    // ==========================================
-    // START PAGE
-    // ==========================================
-
-    async function initializePage() {
-
-        const authenticated =
-            await checkSession();
-
-        if (!authenticated) {
             return;
         }
 
-        await loadBalance();
 
-        await loadDataPlans();
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+
+            showMessage(
+                data.message ||
+                "Purchase failed. Please try again.",
+                "error"
+            );
+
+
+            buyButton.disabled =
+                false;
+
+
+            buyButton.textContent =
+                `Buy ${selectedPlan} for ${formatMoney(selectedPrice)}`;
+
+
+            return;
+        }
+
+
+        if (
+            typeof data.balance !==
+            "undefined"
+        ) {
+
+            user.balance =
+                data.balance;
+
+
+            updateUserDisplay();
+
+
+            document.getElementById(
+                "balance"
+            ).textContent =
+                formatMoney(
+                    data.balance
+                );
+        }
+
+
+        showMessage(
+            `Purchase successful! ${
+                data.network ||
+                selectedNetwork
+            } ${
+                data.plan ||
+                selectedPlan
+            } sent to ${
+                data.phone ||
+                phone
+            }. Reference: ${
+                data.reference ||
+                "N/A"
+            }`,
+            "success"
+        );
+
+
+        buyButton.textContent =
+            "Purchase Successful";
+
+
+        document.getElementById(
+            "purchasePin"
+        ).value = "";
+
+
+    } catch (error) {
+
+        console.error(
+            "Purchase error:",
+            error
+        );
+
+
+        showMessage(
+            "Unable to connect to the server. Please try again.",
+            "error"
+        );
+
+
+        buyButton.disabled =
+            false;
+
+
+        buyButton.textContent =
+            `Buy ${selectedPlan} for ${formatMoney(selectedPrice)}`;
+    }
+}
+
+
+// =========================================================
+// INITIALIZE
+// =========================================================
+
+async function initializePage() {
+
+    console.log(
+        "CheapData Buy Data page starting..."
+    );
+
+
+    const authenticated =
+        await checkSession();
+
+
+    if (!authenticated) {
+
+        return;
     }
 
-    initializePage();
+
+    console.log(
+        "Authenticated user:",
+        user
+    );
+
+
+    await loadBalance();
+
+    await loadDataPlans();
+}
+
+
+initializePage();
 
 </script>
 

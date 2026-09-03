@@ -196,148 +196,213 @@
 
 <body>
 
-    <header>
-        <a href="/" class="logo">CheapData</a>
-    </header>
+<header>
+    <a href="/" class="logo">CheapData</a>
+</header>
 
-    <div class="container">
+<div class="container">
 
-        <div class="login-card">
+    <div class="login-card">
 
-            <h1>Welcome Back</h1>
+        <h1>Welcome Back</h1>
 
-            <p class="subtitle">
-                Login to your CheapData account
-            </p>
+        <p class="subtitle">
+            Login to your CheapData account
+        </p>
 
-            <form id="loginForm">
+        <form id="loginForm">
 
-                <label for="email">
-                    Email Address
-                </label>
+            <label for="email">
+                Email Address
+            </label>
 
+            <input
+                type="email"
+                id="email"
+                name="email"
+                placeholder="Enter your email"
+                autocomplete="email"
+                required
+            >
+
+            <label for="password">
+                Password
+            </label>
+
+            <div class="password-container">
                 <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    placeholder="Enter your email"
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Enter your password"
+                    autocomplete="current-password"
                     required
                 >
+            </div>
 
-                <label for="password">
-                    Password
-                </label>
-
-                <div class="password-container">
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        placeholder="Enter your password"
-                        required
-                    >
-                </div>
-
-                <a
-                    href="/forgot-password.html"
-                    class="forgot-password"
-                >
-                    Forgot Password?
-                </a>
-
-                <button type="submit" id="loginButton">
-                    Login
-                </button>
-
-                <div id="message" class="message"></div>
-
-            </form>
-
-            <p class="register-text">
-                Don't have an account?
-                <a href="/register.html">
-                    Create Account
-                </a>
-            </p>
-
-            <a href="/" class="back-home">
-                ← Back to Homepage
+            <a
+                href="/forgot-password.html"
+                class="forgot-password"
+            >
+                Forgot Password?
             </a>
 
-        </div>
+            <button type="submit" id="loginButton">
+                Login
+            </button>
+
+            <div id="message" class="message"></div>
+
+        </form>
+
+        <p class="register-text">
+            Don't have an account?
+            <a href="/register.html">
+                Create Account
+            </a>
+        </p>
+
+        <a href="/" class="back-home">
+            ← Back to Homepage
+        </a>
 
     </div>
 
-    <footer>
-        © 2026 CheapData. All rights reserved.
-    </footer>
+</div>
 
-    <script>
-        const loginForm = document.getElementById("loginForm");
-        const loginButton = document.getElementById("loginButton");
-        const message = document.getElementById("message");
+<footer>
+    © 2026 CheapData. All rights reserved.
+</footer>
 
-        loginForm.addEventListener("submit", async function (event) {
-            event.preventDefault();
+<script>
+    const loginForm = document.getElementById("loginForm");
+    const loginButton = document.getElementById("loginButton");
+    const message = document.getElementById("message");
 
-            const email = document.getElementById("email").value.trim();
-            const password = document.getElementById("password").value;
+    function showMessage(text, type) {
+        message.textContent = text;
+        message.className = "message " + type;
+        message.style.display = "block";
+    }
 
-            message.style.display = "none";
-            message.className = "message";
+    loginForm.addEventListener("submit", async function (event) {
 
-            loginButton.disabled = true;
-            loginButton.textContent = "Logging in...";
+        event.preventDefault();
+
+        const email = document
+            .getElementById("email")
+            .value
+            .trim()
+            .toLowerCase();
+
+        const password = document
+            .getElementById("password")
+            .value;
+
+        message.style.display = "none";
+        message.textContent = "";
+
+        loginButton.disabled = true;
+        loginButton.textContent = "Logging in...";
+
+        try {
+
+            const response = await fetch("/api/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                credentials: "include",
+                body: JSON.stringify({
+                    email: email,
+                    password: password
+                })
+            });
+
+            /*
+             * Read the response as text first.
+             * This prevents:
+             * "JSON.parse: unexpected character..."
+             */
+            const responseText = await response.text();
+
+            let data;
 
             try {
-                const response = await fetch("/api/login", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        email,
-                        password
-                    })
-                });
+                data = JSON.parse(responseText);
+            } catch (jsonError) {
 
-                const data = await response.json();
+                console.error(
+                    "Server returned non-JSON response:",
+                    responseText
+                );
 
-                if (!response.ok || !data.success) {
-                    throw new Error(
-                        data.message || "Login failed."
-                    );
-                }
+                throw new Error(
+                    "The server returned an invalid response. " +
+                    "Please make sure the CheapData server is running correctly."
+                );
+            }
+
+            if (!response.ok || !data.success) {
+
+                throw new Error(
+                    data.message || "Invalid email or password."
+                );
+            }
+
+            /*
+             * Save logged-in user locally.
+             */
+            if (data.user) {
 
                 localStorage.setItem(
                     "cheapdataUser",
                     JSON.stringify(data.user)
                 );
 
-                message.textContent = "Login successful!";
-                message.classList.add("success");
-                message.style.display = "block";
-
-                setTimeout(() => {
-                    window.location.href = "/dashboard.html";
-                }, 700);
-
-            } catch (error) {
-
-                message.textContent =
-                    error.message ||
-                    "Unable to login. Please try again.";
-
-                message.classList.add("error");
-                message.style.display = "block";
-
-            } finally {
-
-                loginButton.disabled = false;
-                loginButton.textContent = "Login";
+                /*
+                 * Also keep the user ID separately.
+                 */
+                if (data.user.id) {
+                    localStorage.setItem(
+                        "cheapdataUserId",
+                        String(data.user.id)
+                    );
+                }
             }
-        });
-    </script>
+
+            showMessage(
+                "Login successful! Redirecting...",
+                "success"
+            );
+
+            /*
+             * Give the session cookie a moment to be stored
+             * before going to the dashboard.
+             */
+            setTimeout(function () {
+                window.location.href = "/dashboard.html";
+            }, 700);
+
+        } catch (error) {
+
+            console.error("Login error:", error);
+
+            showMessage(
+                error.message ||
+                "Unable to login. Please try again.",
+                "error"
+            );
+
+        } finally {
+
+            loginButton.disabled = false;
+            loginButton.textContent = "Login";
+        }
+
+    });
+</script>
 
 </body>
 </html>
