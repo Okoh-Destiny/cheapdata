@@ -74,6 +74,8 @@
             color: #667085;
         }
 
+        /* WALLET */
+
         .balance-card {
             background: #176b3a;
             color: white;
@@ -94,6 +96,30 @@
         .balance {
             font-size: 38px;
             font-weight: bold;
+            margin-bottom: 22px;
+        }
+
+        .fund-wallet {
+            display: inline-block;
+
+            background: white;
+            color: #176b3a;
+
+            text-decoration: none;
+
+            padding: 13px 22px;
+
+            border-radius: 9px;
+
+            font-weight: bold;
+
+            transition: 0.2s;
+        }
+
+        .fund-wallet:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 5px 15px rgba(0, 0, 0, 0.15);
         }
 
         .section-title {
@@ -102,7 +128,10 @@
 
         .services {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+
+            grid-template-columns:
+                repeat(2, 1fr);
+
             gap: 20px;
 
             margin-bottom: 35px;
@@ -140,6 +169,76 @@
             color: #667085;
         }
 
+        /* ADMIN */
+
+        .admin-section {
+            margin-bottom: 35px;
+        }
+
+        .admin-card {
+            background: linear-gradient(
+                135deg,
+                #172033,
+                #26344d
+            );
+
+            color: white;
+
+            padding: 25px;
+
+            border-radius: 15px;
+
+            box-shadow:
+                0 8px 25px rgba(23, 32, 51, 0.15);
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+
+            gap: 20px;
+        }
+
+        .admin-card-icon {
+            font-size: 38px;
+            margin-bottom: 10px;
+        }
+
+        .admin-card h3 {
+            margin-bottom: 7px;
+        }
+
+        .admin-card p {
+            color: #d0d5dd;
+        }
+
+        .admin-button {
+            display: inline-block;
+
+            background: white;
+
+            color: #172033;
+
+            text-decoration: none;
+
+            padding: 13px 20px;
+
+            border-radius: 9px;
+
+            font-weight: bold;
+
+            white-space: nowrap;
+
+            transition: 0.2s;
+        }
+
+        .admin-button:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
         .account-card {
             background: white;
 
@@ -154,6 +253,7 @@
 
         .account-row {
             display: flex;
+
             justify-content: space-between;
 
             padding: 14px 0;
@@ -266,6 +366,16 @@
                 gap: 15px;
             }
 
+            .admin-card {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .admin-button {
+                width: 100%;
+                text-align: center;
+            }
+
         }
 
     </style>
@@ -311,7 +421,7 @@
     </div>
 
 
-    <!-- BALANCE -->
+    <!-- WALLET -->
 
     <div class="balance-card">
 
@@ -327,6 +437,14 @@
 
         </div>
 
+        <a
+            href="/fund-wallet.html"
+            class="fund-wallet">
+
+            💳 Fund Wallet
+
+        </a>
+
     </div>
 
 
@@ -338,6 +456,7 @@
 
 
     <div class="services">
+
 
         <a
             href="/buy-data.html"
@@ -376,6 +495,50 @@
 
         </a>
 
+
+    </div>
+
+
+    <!-- ADMIN PANEL -->
+
+    <div
+        id="adminSection"
+        class="admin-section"
+        style="display: none;">
+
+        <h2 class="section-title">
+            Administration
+        </h2>
+
+        <div class="admin-card">
+
+            <div>
+
+                <div class="admin-card-icon">
+                    🛠️
+                </div>
+
+                <h3>
+                    CheapData Admin Panel
+                </h3>
+
+                <p>
+                    Manage users, transactions, data plans and
+                    platform settings.
+                </p>
+
+            </div>
+
+            <a
+                href="/admin.html"
+                class="admin-button">
+
+                Open Admin Panel →
+
+            </a>
+
+        </div>
+
     </div>
 
 
@@ -387,6 +550,7 @@
 
 
     <div class="account-card">
+
 
         <div class="account-row">
 
@@ -437,6 +601,7 @@
             </span>
 
         </div>
+
 
     </div>
 
@@ -510,6 +675,19 @@ if (!savedUser) {
         user.phone;
 
 
+    // Show admin panel immediately if saved user is admin
+
+    if (
+        Number(user.is_admin) === 1
+    ) {
+
+        document.getElementById(
+            "adminSection"
+        ).style.display = "block";
+
+    }
+
+
     loadUser();
 
 }
@@ -531,7 +709,10 @@ async function loadUser() {
 
         const response =
             await fetch(
-                "/api/user/" + user.id
+                "/api/user/" + user.id,
+                {
+                    credentials: "include"
+                }
             );
 
 
@@ -554,20 +735,56 @@ async function loadUser() {
                 ).toLocaleString();
 
 
+            // Show admin panel using fresh database value
+
+            if (
+                Number(updatedUser.is_admin) === 1
+            ) {
+
+                document.getElementById(
+                    "adminSection"
+                ).style.display = "block";
+
+            } else {
+
+                document.getElementById(
+                    "adminSection"
+                ).style.display = "none";
+
+            }
+
+
             localStorage.setItem(
                 "cheapdataUser",
                 JSON.stringify({
-                    id: updatedUser.id,
-                    name: updatedUser.name,
-                    email: updatedUser.email,
-                    phone: updatedUser.phone,
-                    balance: updatedUser.balance,
+
+                    id:
+                        updatedUser.id,
+
+                    name:
+                        updatedUser.name,
+
+                    email:
+                        updatedUser.email,
+
+                    phone:
+                        updatedUser.phone,
+
+                    balance:
+                        updatedUser.balance,
+
+                    is_admin:
+                        updatedUser.is_admin,
+
                     virtualAccountNumber:
                         updatedUser.virtual_account_number,
+
                     virtualBankName:
                         updatedUser.virtual_bank_name,
+
                     kycStatus:
                         updatedUser.kyc_status
+
                 })
             );
 
@@ -585,7 +802,10 @@ async function loadUser() {
             error
         );
 
-        loadTransactions(user.id);
+
+        loadTransactions(
+            user.id
+        );
 
     }
 
@@ -609,7 +829,10 @@ async function loadTransactions(userId) {
         const response =
             await fetch(
                 "/api/transactions/" +
-                userId
+                userId,
+                {
+                    credentials: "include"
+                }
             );
 
 
@@ -623,9 +846,13 @@ async function loadTransactions(userId) {
         ) {
 
             container.innerHTML = `
+
                 <div class="empty">
+
                     No transactions yet.
+
                 </div>
+
             `;
 
             return;
@@ -639,13 +866,16 @@ async function loadTransactions(userId) {
         data.transactions.forEach(
             transaction => {
 
+
                 const isCredit =
                     transaction.type ===
                     "wallet_funding";
 
 
                 const sign =
-                    isCredit ? "+" : "-";
+                    isCredit
+                        ? "+"
+                        : "-";
 
 
                 const amount =
@@ -683,6 +913,7 @@ async function loadTransactions(userId) {
 
                         </div>
 
+
                         <div class="transaction-date">
 
                             ${date}
@@ -705,6 +936,7 @@ async function loadTransactions(userId) {
 
                         </div>
 
+
                         <div class="transaction-status">
 
                             ${transaction.status}
@@ -716,7 +948,9 @@ async function loadTransactions(userId) {
                 `;
 
 
-                container.appendChild(div);
+                container.appendChild(
+                    div
+                );
 
             }
         );
@@ -731,9 +965,13 @@ async function loadTransactions(userId) {
 
 
         container.innerHTML = `
+
             <div class="empty">
+
                 Unable to load transactions.
+
             </div>
+
         `;
 
     }
@@ -745,16 +983,38 @@ async function loadTransactions(userId) {
 // LOGOUT
 // ========================================
 
-function logout() {
+async function logout() {
+
+    try {
+
+        await fetch(
+            "/api/logout",
+            {
+                method: "POST",
+                credentials: "include"
+            }
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Logout error:",
+            error
+        );
+
+    }
+
 
     localStorage.removeItem(
         "cheapdataUser"
     );
 
+
     window.location.href =
         "/login.html";
 
 }
+
 
 </script>
 

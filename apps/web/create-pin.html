@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Create Purchase PIN | CheapData</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #f5f7fb;
+
+            display: flex;
+            justify-content: center;
+            align-items: center;
+
+            padding: 20px;
+
+            color: #172033;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+        }
+
+        .logo {
+            text-align: center;
+
+            font-size: 30px;
+            font-weight: bold;
+
+            color: #176b3a;
+
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background: white;
+
+            padding: 35px;
+
+            border-radius: 18px;
+
+            box-shadow:
+                0 10px 35px rgba(0, 0, 0, 0.08);
+        }
+
+        .icon {
+            width: 70px;
+            height: 70px;
+
+            margin: 0 auto 20px;
+
+            border-radius: 50%;
+
+            background: #eef8f2;
+
+            display: flex;
+            justify-content: center;
+            align-items: center;
+
+            font-size: 32px;
+        }
+
+        h1 {
+            text-align: center;
+
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+
+            color: #667085;
+
+            line-height: 1.5;
+
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+
+            font-weight: bold;
+
+            margin-bottom: 8px;
+        }
+
+        input {
+            width: 100%;
+
+            padding: 15px;
+
+            border: 1px solid #d0d5dd;
+
+            border-radius: 8px;
+
+            font-size: 20px;
+
+            text-align: center;
+
+            letter-spacing: 8px;
+
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #176b3a;
+        }
+
+        .hint {
+            font-size: 13px;
+
+            color: #667085;
+
+            margin-top: 7px;
+
+            text-align: center;
+        }
+
+        .create-btn {
+            width: 100%;
+
+            padding: 15px;
+
+            border: none;
+
+            border-radius: 8px;
+
+            background: #176b3a;
+
+            color: white;
+
+            font-size: 17px;
+
+            font-weight: bold;
+
+            cursor: pointer;
+
+            margin-top: 5px;
+        }
+
+        .create-btn:hover {
+            background: #12562e;
+        }
+
+        .create-btn:disabled {
+            opacity: 0.6;
+
+            cursor: not-allowed;
+        }
+
+        .message {
+            display: none;
+
+            padding: 12px;
+
+            border-radius: 8px;
+
+            margin-bottom: 18px;
+
+            text-align: center;
+
+            line-height: 1.4;
+        }
+
+        .security {
+            margin-top: 25px;
+
+            padding: 14px;
+
+            background: #f8fafc;
+
+            border-radius: 10px;
+
+            color: #667085;
+
+            font-size: 13px;
+
+            line-height: 1.5;
+
+            text-align: center;
+        }
+
+        .back-login {
+            display: block;
+
+            text-align: center;
+
+            margin-top: 20px;
+
+            color: #176b3a;
+
+            text-decoration: none;
+
+            font-weight: bold;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <div class="logo">
+        CheapData
+    </div>
+
+
+    <div class="card">
+
+        <div class="icon">
+            🔐
+        </div>
+
+
+        <h1>
+            Create Purchase PIN
+        </h1>
+
+
+        <p class="subtitle">
+            Your Purchase PIN will be required whenever
+            you buy data or airtime from CheapData.
+        </p>
+
+
+        <div
+            id="message"
+            class="message">
+        </div>
+
+
+        <form id="pinForm">
+
+            <div class="form-group">
+
+                <label for="pin">
+                    Create 4-Digit PIN
+                </label>
+
+                <input
+                    type="password"
+                    id="pin"
+                    inputmode="numeric"
+                    maxlength="4"
+                    pattern="[0-9]{4}"
+                    placeholder="••••"
+                    autocomplete="new-password"
+                    required>
+
+                <p class="hint">
+                    Choose a 4-digit PIN you can remember.
+                </p>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label for="confirmPin">
+                    Confirm PIN
+                </label>
+
+                <input
+                    type="password"
+                    id="confirmPin"
+                    inputmode="numeric"
+                    maxlength="4"
+                    pattern="[0-9]{4}"
+                    placeholder="••••"
+                    autocomplete="new-password"
+                    required>
+
+            </div>
+
+
+            <button
+                type="submit"
+                class="create-btn"
+                id="createButton">
+
+                Create Purchase PIN
+
+            </button>
+
+        </form>
+
+
+        <div class="security">
+
+            🔒 Your PIN is securely stored and is not
+            displayed as plain text.
+
+        </div>
+
+    </div>
+
+
+    <a
+        href="/login.html"
+        class="back-login">
+
+        Already have an account? Login
+
+    </a>
+
+</div>
+
+
+<script>
+
+const form =
+    document.getElementById("pinForm");
+
+const pinInput =
+    document.getElementById("pin");
+
+const confirmPinInput =
+    document.getElementById("confirmPin");
+
+const button =
+    document.getElementById("createButton");
+
+const message =
+    document.getElementById("message");
+
+
+// ======================================
+// GET NEW USER ID
+// ======================================
+
+const userId =
+    localStorage.getItem("cheapdataNewUserId");
+
+
+// ======================================
+// CHECK USER ID
+// ======================================
+
+if (!userId) {
+
+    showMessage(
+        "We could not find your new account. Please register again.",
+        "error"
+    );
+
+    button.disabled = true;
+
+}
+
+
+// ======================================
+// ALLOW NUMBERS ONLY
+// ======================================
+
+pinInput.addEventListener(
+    "input",
+    function() {
+
+        this.value =
+            this.value.replace(/\D/g, "");
+
+    }
+);
+
+
+confirmPinInput.addEventListener(
+    "input",
+    function() {
+
+        this.value =
+            this.value.replace(/\D/g, "");
+
+    }
+);
+
+
+// ======================================
+// SUBMIT PIN
+// ======================================
+
+form.addEventListener(
+    "submit",
+    async function(event) {
+
+        event.preventDefault();
+
+
+        const pin =
+            pinInput.value;
+
+        const confirmPin =
+            confirmPinInput.value;
+
+
+        // ==================================
+        // CHECK USER ID
+        // ==================================
+
+        if (!userId) {
+
+            showMessage(
+                "Your account information could not be found. Please register again.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // ==================================
+        // VALIDATE PIN
+        // ==================================
+
+        if (!/^\d{4}$/.test(pin)) {
+
+            showMessage(
+                "Your Purchase PIN must be exactly 4 digits.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // ==================================
+        // CONFIRM PIN
+        // ==================================
+
+        if (pin !== confirmPin) {
+
+            showMessage(
+                "The PINs do not match.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // ==================================
+        // DISABLE BUTTON
+        // ==================================
+
+        button.disabled = true;
+
+        button.textContent =
+            "Creating PIN...";
+
+
+        try {
+
+            // ==============================
+            // SEND TO SERVER
+            // ==============================
+
+            const response =
+                await fetch(
+                    "/api/purchase-pin/set",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            userId:
+                                Number(userId),
+
+                            purchasePin:
+                                pin
+
+                        })
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            // ==============================
+            // HANDLE ERROR
+            // ==============================
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+
+                showMessage(
+                    data.message ||
+                    "Unable to create Purchase PIN.",
+                    "error"
+                );
+
+                button.disabled = false;
+
+                button.textContent =
+                    "Create Purchase PIN";
+
+                return;
+
+            }
+
+
+            // ==============================
+            // SUCCESS
+            // ==============================
+
+            showMessage(
+                "Purchase PIN created successfully! 🎉",
+                "success"
+            );
+
+
+            button.textContent =
+                "PIN Created ✓";
+
+
+            /*
+                The temporary user ID is no
+                longer needed after PIN creation.
+            */
+
+            localStorage.removeItem(
+                "cheapdataNewUserId"
+            );
+
+
+            // ==============================
+            // GO TO LOGIN
+            // ==============================
+
+            setTimeout(
+                function() {
+
+                    window.location.href =
+                        "/login.html";
+
+                },
+                1200
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "CREATE PIN ERROR:",
+                error
+            );
+
+
+            showMessage(
+                "Unable to connect to the server.",
+                "error"
+            );
+
+
+            button.disabled = false;
+
+            button.textContent =
+                "Create Purchase PIN";
+
+        }
+
+    }
+);
+
+
+// ======================================
+// MESSAGE FUNCTION
+// ======================================
+
+function showMessage(text, type) {
+
+    message.textContent =
+        text;
+
+    message.style.display =
+        "block";
+
+
+    if (type === "error") {
+
+        message.style.background =
+            "#fee4e2";
+
+        message.style.color =
+            "#b42318";
+
+    } else {
+
+        message.style.background =
+            "#eef8f2";
+
+        message.style.color =
+            "#176b3a";
+
+    }
+
+}
+
+</script>
+
+</body>
+
+</html>
