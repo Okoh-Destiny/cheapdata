@@ -1,0 +1,26 @@
+{
+  "name": "@cheapdata/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CheapData backend API",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "db:fix": "node scripts/fix-database.js",
+    "db:reset-fields": "node scripts/add-reset-fields.js",
+    "db:purchase-pin": "node scripts/add-purchase-pin.js",
+    "make-admin": "node scripts/make-admin.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-session": "^1.18.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

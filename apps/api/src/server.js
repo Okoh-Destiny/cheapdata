@@ -1,18 +1,28 @@
 const express = require("express");
+const session = require("express-session");
 const Database = require("better-sqlite3");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const path = require("path");
 require("dotenv").config();
 
+if (!process.env.SESSION_SECRET) {
+    if (process.env.NODE_ENV === "production") {
+        console.error("SESSION_SECRET is not set. Refusing to start in production without it.");
+        process.exit(1);
+    }
+    console.warn("SESSION_SECRET is not set. Using an insecure development-only fallback.");
+}
+
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // =========================
 // DATABASE
 // =========================
 
-const db = new Database("cheapdata.db");
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, "../../../data/cheapdata.db");
+const db = new Database(DB_PATH);
 
 db.pragma("foreign_keys = ON");
 
@@ -102,6 +112,18 @@ addColumnIfMissing(
     "INTEGER NOT NULL DEFAULT 0"
 );
 
+addColumnIfMissing(
+    "users",
+    "reset_token_hash",
+    "TEXT"
+);
+
+addColumnIfMissing(
+    "users",
+    "reset_token_expires_at",
+    "INTEGER"
+);
+
 // =========================
 // MIDDLEWARE
 // =========================
@@ -109,7 +131,48 @@ addColumnIfMissing(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(session({
+    secret: process.env.SESSION_SECRET || "dev-only-insecure-secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 1000 * 60 * 60 * 24 // 24 hours
+    }
+}));
+
+const WEB_PUBLIC_DIR = path.join(__dirname, "../../web");
+app.use(express.static(WEB_PUBLIC_DIR));
+
+// =========================
+// AUTH MIDDLEWARE
+// =========================
+
+function requireAuth(req, res, next) {
+    if (!req.session || !req.session.userId) {
+        return res.status(401).json({
+            success: false,
+            message: "Please log in to continue"
+        });
+    }
+    next();
+}
+
+function requireAdmin(req, res, next) {
+    const admin = getAdmin(req.session && req.session.userId);
+
+    if (!admin) {
+        return res.status(403).json({
+            success: false,
+            message: "Admin access required"
+        });
+    }
+
+    req.admin = admin;
+    next();
+}
 
 // =========================
 // HELPER FUNCTIONS
@@ -309,6 +372,20 @@ app.post("/api/login", async (req, res) => {
             });
         }
 
+        req.session.regenerate((err) => {
+            if (err) {
+                console.error("Session regenerate error:", err);
+                return res.status(500).json({
+                    success: false,
+                    message: "Login failed"
+                });
+            }
+
+            req.session.userId = user.id;
+            finishLogin();
+        });
+
+        function finishLogin() {
         res.json({
             success: true,
             message: "Login successful",
@@ -332,6 +409,7 @@ app.post("/api/login", async (req, res) => {
                     user.created_at
             }
         });
+        }
 
     } catch (error) {
         console.error(
@@ -347,11 +425,42 @@ app.post("/api/login", async (req, res) => {
 });
 
 // =========================
+// LOGOUT
+// =========================
+
+app.post("/api/logout", (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error("Logout error:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Logout failed"
+            });
+        }
+
+        res.clearCookie("connect.sid");
+        res.json({
+            success: true,
+            message: "Logged out"
+        });
+    });
+});
+
+// =========================
 // GET USER
 // =========================
 
-app.get("/api/user/:id", (req, res) => {
+app.get("/api/user/:id", requireAuth, (req, res) => {
     try {
+        const requestedId = Number(req.params.id);
+
+        if (requestedId !== req.session.userId && !getAdmin(req.session.userId)) {
+            return res.status(403).json({
+                success: false,
+                message: "You can only view your own account"
+            });
+        }
+
         const user = db.prepare(`
             SELECT
                 id,
@@ -409,17 +518,15 @@ app.get("/api/user/:id", (req, res) => {
 
 // SET PURCHASE PIN
 
-app.post("/api/purchase-pin/set", async (req, res) => {
+app.post("/api/purchase-pin/set", requireAuth, async (req, res) => {
     try {
-        const {
-            userId,
-            pin
-        } = req.body;
+        const userId = req.session.userId;
+        const { pin } = req.body;
 
-        if (!userId || pin === undefined) {
+        if (pin === undefined) {
             return res.status(400).json({
                 success: false,
-                message: "User ID and PIN are required"
+                message: "PIN is required"
             });
         }
 
@@ -488,16 +595,15 @@ app.post("/api/purchase-pin/set", async (req, res) => {
 
 // CHANGE PURCHASE PIN
 
-app.post("/api/purchase-pin/change", async (req, res) => {
+app.post("/api/purchase-pin/change", requireAuth, async (req, res) => {
     try {
+        const userId = req.session.userId;
         const {
-            userId,
             currentPin,
             newPin
         } = req.body;
 
         if (
-            !userId ||
             currentPin === undefined ||
             newPin === undefined
         ) {
@@ -602,17 +708,15 @@ app.post("/api/purchase-pin/change", async (req, res) => {
 
 // VERIFY PURCHASE PIN
 
-app.post("/api/purchase-pin/verify", async (req, res) => {
+app.post("/api/purchase-pin/verify", requireAuth, async (req, res) => {
     try {
-        const {
-            userId,
-            pin
-        } = req.body;
+        const userId = req.session.userId;
+        const { pin } = req.body;
 
-        if (!userId || pin === undefined) {
+        if (pin === undefined) {
             return res.status(400).json({
                 success: false,
-                message: "User ID and PIN are required"
+                message: "PIN is required"
             });
         }
 
@@ -682,17 +786,21 @@ app.post("/api/purchase-pin/verify", async (req, res) => {
 // DEVELOPMENT ONLY
 // =========================
 
-app.post("/api/test-fund", (req, res) => {
+app.post("/api/test-fund", requireAuth, (req, res) => {
     try {
-        const {
-            userId,
-            amount
-        } = req.body;
+        if (process.env.NODE_ENV === "production") {
+            return res.status(404).json({
+                success: false,
+                message: "Not found"
+            });
+        }
+
+        const userId = req.session.userId;
+        const { amount } = req.body;
 
         const fundAmount = Number(amount);
 
         if (
-            !userId ||
             !Number.isFinite(fundAmount) ||
             fundAmount <= 0
         ) {
@@ -784,10 +892,10 @@ app.post("/api/test-fund", (req, res) => {
 // PURCHASE DATA
 // =========================
 
-app.post("/api/purchase-data", async (req, res) => {
+app.post("/api/purchase-data", requireAuth, async (req, res) => {
     try {
+        const userId = req.session.userId;
         const {
-            userId,
             network,
             phone,
             plan,
@@ -795,7 +903,6 @@ app.post("/api/purchase-data", async (req, res) => {
         } = req.body;
 
         if (
-            !userId ||
             !network ||
             !phone ||
             !plan ||
@@ -975,10 +1082,10 @@ app.post("/api/purchase-data", async (req, res) => {
 // PURCHASE AIRTIME
 // =========================
 
-app.post("/api/purchase-airtime", async (req, res) => {
+app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
     try {
+        const userId = req.session.userId;
         const {
-            userId,
             network,
             phone,
             amount,
@@ -988,7 +1095,6 @@ app.post("/api/purchase-airtime", async (req, res) => {
         const airtimeAmount = Number(amount);
 
         if (
-            !userId ||
             !network ||
             !phone ||
             !amount ||
@@ -1155,8 +1261,17 @@ app.post("/api/purchase-airtime", async (req, res) => {
 // USER TRANSACTIONS
 // =========================
 
-app.get("/api/transactions/:userId", (req, res) => {
+app.get("/api/transactions/:userId", requireAuth, (req, res) => {
     try {
+        const requestedId = Number(req.params.userId);
+
+        if (requestedId !== req.session.userId && !getAdmin(req.session.userId)) {
+            return res.status(403).json({
+                success: false,
+                message: "You can only view your own transactions"
+            });
+        }
+
         const transactions = db.prepare(`
             SELECT
                 id,
@@ -1169,7 +1284,7 @@ app.get("/api/transactions/:userId", (req, res) => {
             FROM transactions
             WHERE user_id = ?
             ORDER BY id DESC
-        `).all(req.params.userId);
+        `).all(requestedId);
 
         res.json({
             success: true,
@@ -1193,17 +1308,8 @@ app.get("/api/transactions/:userId", (req, res) => {
 // ADMIN STATS
 // =========================
 
-app.get("/api/admin/stats/:userId", (req, res) => {
+app.get("/api/admin/stats", requireAuth, requireAdmin, (req, res) => {
     try {
-        const admin = getAdmin(req.params.userId);
-
-        if (!admin) {
-            return res.status(403).json({
-                success: false,
-                message: "Admin access required"
-            });
-        }
-
         const totalUsers = db.prepare(`
             SELECT COUNT(*) AS count
             FROM users
@@ -1275,17 +1381,8 @@ app.get("/api/admin/stats/:userId", (req, res) => {
 // ADMIN USERS
 // =========================
 
-app.get("/api/admin/users/:userId", (req, res) => {
+app.get("/api/admin/users", requireAuth, requireAdmin, (req, res) => {
     try {
-        const admin = getAdmin(req.params.userId);
-
-        if (!admin) {
-            return res.status(403).json({
-                success: false,
-                message: "Admin access required"
-            });
-        }
-
         const users = db.prepare(`
             SELECT
                 id,
@@ -1324,17 +1421,8 @@ app.get("/api/admin/users/:userId", (req, res) => {
 // ADMIN TRANSACTIONS
 // =========================
 
-app.get("/api/admin/transactions/:userId", (req, res) => {
+app.get("/api/admin/transactions", requireAuth, requireAdmin, (req, res) => {
     try {
-        const admin = getAdmin(req.params.userId);
-
-        if (!admin) {
-            return res.status(403).json({
-                success: false,
-                message: "Admin access required"
-            });
-        }
-
         const transactions = db.prepare(`
             SELECT
                 transactions.id,
@@ -1544,20 +1632,12 @@ app.post("/api/reset-password", async (req, res) => {
 // FUND WALLET - PAYSTACK
 // =========================
 
-app.post("/api/fund-wallet", async (req, res) => {
+app.post("/api/fund-wallet", requireAuth, async (req, res) => {
     try {
-        const { userId, amount } = req.body;
+        const { amount } = req.body;
 
-        const numericUserId = Number(userId);
+        const numericUserId = req.session.userId;
         const fundingAmount = Number(amount);
-
-        // Validate user ID
-        if (!Number.isInteger(numericUserId) || numericUserId <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid user account."
-            });
-        }
 
         // Validate amount
         if (

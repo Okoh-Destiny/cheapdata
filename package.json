@@ -1,23 +1,22 @@
 {
-  "name": "cheapdata",
+  "name": "cheapdata-monorepo",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "CheapData monorepo",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "npm run start --workspace=@cheapdata/api",
+    "dev": "npm run dev --workspace=@cheapdata/api",
+    "api": "npm run start --workspace=@cheapdata/api",
+    "db:fix": "npm run db:fix --workspace=@cheapdata/api",
+    "db:reset-fields": "npm run db:reset-fields --workspace=@cheapdata/api",
+    "db:purchase-pin": "npm run db:purchase-pin --workspace=@cheapdata/api",
+    "make-admin": "npm run make-admin --workspace=@cheapdata/api"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "bcrypt": "^6.0.0",
-    "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.14"
+  "engines": {
+    "node": ">=18"
   }
 }

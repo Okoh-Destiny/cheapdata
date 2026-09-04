@@ -1,6 +1,8 @@
+const path = require("path");
 const Database = require("better-sqlite3");
 
-const db = new Database("cheapdata.db");
+const dbPath = process.env.DB_PATH || path.join(__dirname, "../../../data/cheapdata.db");
+const db = new Database(dbPath);
 
 // Add admin column if it doesn't exist
 const columns = db.prepare("PRAGMA table_info(users)").all();

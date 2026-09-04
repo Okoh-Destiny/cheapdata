@@ -1,4 +1,7 @@
 node_modules/
-cheapdata.db
-*.db
 .env
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+npm-debug.log*
