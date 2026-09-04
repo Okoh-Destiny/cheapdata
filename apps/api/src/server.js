@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 // DATABASE
 // =========================
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "../../../data/cheapdata.db");
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, "../data/cheapdata.db");
 const db = new Database(DB_PATH);
 
 db.pragma("foreign_keys = ON");

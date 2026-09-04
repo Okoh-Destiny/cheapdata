@@ -1,8 +1,10 @@
 const axios = require("axios");
 const Database = require("better-sqlite3");
+const path = require("path");
 require("dotenv").config();
 
-const db = new Database("cheapdata.db");
+const dbPath = process.env.DB_PATH || path.join(__dirname, "../data/cheapdata.db");
+const db = new Database(dbPath);
 
 const BASE_URL =
     process.env.WISESUB_BASE_URL ||
