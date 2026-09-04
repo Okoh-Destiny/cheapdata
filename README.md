@@ -1,54 +1,105 @@
-# CheapData Monorepo
+# CheapData
 
-CheapData is organized as a small npm monorepo so the frontend and backend are separated cleanly while remaining in one repository.
+CheapData is a data and airtime reselling platform. Customers create accounts,
+fund a wallet through Paystack, and use their balance to purchase mobile data
+and airtime. The Express API handles authentication, wallet operations,
+purchases, transactions, and administration. The web workspace contains the
+browser pages served by the API.
 
-## Structure
+## Project structure
 
 ```text
-CHEAPDATA/
+.
 ├── apps/
 │   ├── api/
-│   │   ├── src/
-│   │   │   └── server.js
-│   │   ├── scripts/
-│   │   │   ├── add-purchase-pin.js
-│   │   │   ├── add-reset-fields.js
-│   │   │   ├── fix-database.js
-│   │   │   └── make-admin.js
+│   │   ├── data/                 # Local SQLite database; ignored by Git
+│   │   ├── scripts/              # Database, admin, and WiseSub utilities
+│   │   ├── src/server.js         # Express API and static file server
 │   │   └── package.json
-│   │
 │   └── web/
-│       ├── *.html
+│       ├── *.html                # Customer and admin pages
 │       ├── styles.css
 │       └── package.json
-│
-├── data/
-│   └── cheapdata.db
-├── .env
-├── .env.example
-├── package.json
+├── .env.example                  # Configuration template
+├── package.json                  # npm workspace root
+├── package-lock.json
 └── README.md
 ```
 
-## Codespaces setup
+The root package owns only workspace-level commands. Backend dependencies and
+development tools are declared in `apps/api/package.json`. The web workspace
+currently uses plain HTML, CSS, and browser JavaScript and has no npm
+dependencies.
 
-From the repository root:
+## Requirements
+
+- Node.js 18 or newer
+- npm
+
+## Install
+
+Run this from the repository root:
 
 ```bash
 npm install
+```
+
+Copy `.env.example` to `.env` and fill in the values required for the services
+you use. Keep `.env` private and never commit real credentials.
+
+## Run
+
+Development mode, with automatic restart:
+
+```bash
+npm run dev
+```
+
+Production-style start:
+
+```bash
 npm start
 ```
 
-The server listens on the port configured by `PORT` (normally 3000).
+The server listens on `PORT` and defaults to `3000`. Open
+`http://localhost:3000` in a browser.
 
-## Database
+Useful database commands:
 
-The database is stored at `data/cheapdata.db` by default. You can override it with:
-
-```env
-DB_PATH=/absolute/path/to/cheapdata.db
+```bash
+npm run db:fix
+npm run db:reset-fields
+npm run db:purchase-pin
+npm run make-admin
 ```
 
-## Important
+WiseSub utilities are available through the API workspace:
 
-Keep `.env` private and never commit it. Replace any real API credentials if you are sharing this repository.
+```bash
+npm run wise:sync --workspace=@cheapdata/api
+npm run wise:test --workspace=@cheapdata/api
+npm run wise:test-mtn --workspace=@cheapdata/api
+npm run wise:test-plans --workspace=@cheapdata/api
+npm run wise:test-pricing --workspace=@cheapdata/api
+```
+
+## Environment variables
+
+Use the existing `.env.example` as the source of truth. It defines:
+
+- `PORT` and `NODE_ENV` for server operation
+- `SESSION_SECRET` for signed session cookies
+- `PAYSTACK_SECRET_KEY` for wallet funding
+- `DB_PATH` for the SQLite database location
+- `WISESUB_BASE_URL`, `WISESUB_API_KEY`, `WISESUB_API_SECRET`, and
+	`WISESUB_ENVIRONMENT` for provider integration
+- `CHEAPDATA_MARKUP_PERCENT` for customer pricing
+
+The default database path is `./apps/api/data/cheapdata.db`. Database files and
+SQLite journal files are ignored by Git.
+
+## Security notes
+
+Set a strong `SESSION_SECRET` in production. The API refuses to start in
+production when it is missing. Do not expose Paystack or WiseSub credentials in
+frontend code, documentation, logs, or commits.
