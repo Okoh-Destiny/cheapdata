@@ -1,107 +1,354 @@
 # CheapData Handover
 
-## Project overview
+## 1. Project overview
 
-CheapData is a Node.js monorepo for data and airtime reselling. Users register,
-log in, manage a purchase PIN, fund a wallet through Paystack, and purchase
-mobile data or airtime. Administrators can review platform statistics, users,
-and transactions. WiseSub utilities synchronize provider plans and inspect the
-provider API.
+CheapData is a Node.js monorepo for a data and airtime reselling platform.
+Users register, log in, manage purchase PINs, fund a wallet, and purchase mobile
+data or airtime. Administrators can access usage summaries, user records, and
+transaction data. The backend is built with Express and SQLite; the frontend is a
+static HTML/CSS interface served by the API.
 
-## Repository layout
+The application is intentionally structured as a monorepo:
 
-- `apps/api/src/server.js`: Express server, SQLite access, authentication,
-  wallet operations, purchases, transactions, password reset, and admin routes.
-- `apps/api/data/`: Local SQLite database and SQLite journal files. These files
-  are ignored by Git.
-- `apps/api/scripts/`: Database maintenance, admin setup, and WiseSub utility
-  scripts.
-- `apps/web/`: Static customer and admin HTML pages plus shared CSS. The API
-  serves this directory.
-- `package.json`: npm workspace root and commands that delegate to the API.
-- `.env.example`: Configuration variable template. Keep real values in the
-  untracked `.env` file.
+- root: workspace tooling, root scripts, lockfile, docs, env config
+- `apps/api`: runtime API server, data layer, scripts, tests
+- `apps/web`: static frontend pages and styles
 
-## Local development
+## 2. Current architecture
 
-From the repository root:
+### Core file ownership
+
+- `apps/api/src/server.js`: thin startup file; starts the Express app on the port
+  configured by `PORT`.
+- `apps/api/src/app.js`: main application definition; configures Express, DB,
+  middleware, helper functions, and all route handlers.
+- `apps/api/src/config.js`: environment validation and shared config values such
+  as `DB_PATH`, `WEB_PUBLIC_DIR`, and `PORT`.
+- `apps/api/src/db.js`: SQLite database instance, schema creation, and migration
+  helpers.
+- `apps/api/src/auth.js`: reusable authentication and admin authorization
+  middleware.
+- `apps/api/scripts/`: database repair scripts, admin scripts, and WiseSub
+  provider utilities.
+- `apps/api/test/api-smoke.test.js`: isolated smoke test for API health and
+  frontend serving.
+- `apps/web/`: static customer/admin pages and shared CSS.
+
+### Why the split matters
+
+Before the refactor, the app entry file was handling configuration, database
+setup, migrations, middleware, auth, consumer routes, admin routes, wallet code,
+and process startup. That made it harder to reason about behavior and easier to
+break unrelated logic during a change.
+
+The current split separates responsibilities while preserving behavior:
+
+- config: env and static path management
+- database: SQLite lifecycle and schema migrations
+- auth: session and admin checks
+- app: route registration and middleware flow
+- server: process startup only
+
+## 3. Repository layout
+
+```text
+.
+├── apps/
+│   ├── api/
+│   │   ├── data/
+│   │   │   ├── cheapdata.db
+│   │   │   ├── cheapdata.db-shm
+│   │   │   └── cheapdata.db-wal
+│   │   ├── scripts/
+│   │   │   ├── add-purchase-pin.js
+│   │   │   ├── add-reset-fields.js
+│   │   │   ├── fix-database.js
+│   │   │   ├── make-admin.js
+│   │   │   ├── sync-wisesub.js
+│   │   │   ├── test-mtn.js
+│   │   │   ├── test-wisesub.js
+│   │   │   ├── test-wisesub-plans.js
+│   │   │   └── test-wisesub-pricing.js
+│   │   ├── src/
+│   │   │   ├── app.js
+│   │   │   ├── auth.js
+│   │   │   ├── config.js
+│   │   │   ├── db.js
+│   │   │   └── server.js
+│   │   ├── test/
+│   │   │   └── api-smoke.test.js
+│   │   └── package.json
+│   └── web/
+│       ├── admin.html
+│       ├── buy-airtime.html
+│       ├── buy-data.html
+│       ├── create-pin.html
+│       ├── dashboard.html
+│       ├── forgot-password.html
+│       ├── fund-wallet.html
+│       ├── index.html
+│       ├── login.html
+│       ├── purchase-pin.html
+│       ├── register.html
+│       ├── reset-password.html
+│       ├── styles.css
+│       ├── wallet.html
+│       └── package.json
+├── .env
+├── .env.example
+├── .gitignore
+├── README.md
+├── HANDOVER.md
+├── eslint.config.js
+├── package.json
+├── package-lock.json
+└── .git/
+```
+
+## 4. Local environment setup
+
+### Requirements
+
+- Node.js 18+
+- npm
+
+### Install
+
+From the repo root:
 
 ```bash
 npm install
+```
+
+### Environment file
+
+Use `.env.example` as the template. The active runtime file is `.env` and must
+stay local. Do not commit it.
+
+Required variables include:
+
+- `PORT`
+- `NODE_ENV`
+- `SESSION_SECRET`
+- `PAYSTACK_SECRET_KEY`
+- `DB_PATH`
+- `WISESUB_BASE_URL`
+- `WISESUB_API_KEY`
+- `WISESUB_API_SECRET`
+- `WISESUB_ENVIRONMENT`
+- `CHEAPDATA_MARKUP_PERCENT`
+
+Do not place real secret values in docs, scripts, or commits.
+
+### Default database path
+
+The default app database path is:
+
+```text
+./apps/api/data/cheapdata.db
+```
+
+This path is used by the SQLite setup and scripts unless `DB_PATH` is explicitly
+set in `.env`.
+
+## 5. Developer commands
+
+From the repo root:
+
+```bash
 npm run dev
-```
-
-The development server uses nodemon and listens on `http://localhost:3000` by
-default. Run the production-style process with:
-
-```bash
 npm start
+npm test
+npm run lint
 ```
 
-The root database commands are:
+From the API workspace directly:
 
 ```bash
+cd apps/api
+npm run dev
+npm start
+npm test
 npm run db:fix
 npm run db:reset-fields
 npm run db:purchase-pin
 npm run make-admin
+npm run wise:sync
+npm run wise:test
+npm run wise:test-mtn
+npm run wise:test-plans
+npm run wise:test-pricing
 ```
 
-WiseSub commands run in the API workspace:
+## 6. Runtime behavior and API surface
+
+### Auth flows
+
+- `POST /api/register`
+- `POST /api/login`
+- `POST /api/logout`
+- `POST /api/forgot-password`
+- `POST /api/reset-password`
+- `POST /api/purchase-pin/set`
+- `POST /api/purchase-pin/change`
+- `POST /api/purchase-pin/verify`
+
+These routes manage account creation, password recovery, purchase PIN setup, and
+session-based access control.
+
+### Wallet and funding
+
+- `POST /api/test-fund` — development-only funding route; disabled in production
+- `POST /api/fund-wallet` — Paystack wallet funding initialization
+
+Wallet funding uses Paystack and expects `PAYSTACK_SECRET_KEY` to be configured.
+This is the live payment path and should only be tested with real credentials in a
+proper environment.
+
+### Purchases
+
+- `POST /api/purchase-data`
+- `POST /api/purchase-airtime`
+
+These endpoints validate the authenticated user, check balance, verify purchase
+PIN when required, and record transaction history.
+
+### User and admin data
+
+- `GET /api/user/:id`
+- `GET /api/transactions/:userId`
+- `GET /api/admin/stats`
+- `GET /api/admin/users`
+- `GET /api/admin/transactions`
+
+The admin endpoints require a valid admin session via `requireAdmin`.
+
+### Health
+
+- `GET /api/status`
+
+This should return a successful JSON response when the API is running.
+
+## 7. Database and migration status
+
+The SQLite database is created in `apps/api/data/cheapdata.db` and uses SQLite
+WAL and SHM sidecar files. These are ignored by Git.
+
+The database setup includes:
+
+- `users` table
+- `transactions` table
+- schema migration checks for missing fields such as:
+  - `purchase_pin`
+  - `virtual_account_number`
+  - `virtual_bank_name`
+  - `kyc_status`
+  - `is_admin`
+  - `reset_token_hash`
+  - `reset_token_expires_at`
+
+The migration logic runs automatically when the app boots. This is important when
+restoring or upgrading from an older database state.
+
+## 8. Provider integration notes
+
+### Paystack
+
+Wallet funding initializes a Paystack transaction and expects a valid secret key.
+The app validates the amount range, creates a transaction reference, and returns
+Paystack authorization details to the frontend.
+
+### WiseSub
+
+Provider data and pricing sync tools live in `apps/api/scripts/` and are used to:
+
+- inspect available plans
+- test connection health
+- sync data package metadata into the app database
+- validate provider pricing
+
+These scripts depend on the WiseSub env variables and should only be run in the
+intended environment.
+
+## 9. Testing and linting
+
+### Smoke test
+
+The project includes a lightweight smoke test at:
+
+- `apps/api/test/api-smoke.test.js`
+
+This test runs with `NODE_ENV=test` and uses a temporary SQLite database created
+and removed during the run. It verifies:
+
+- `/api/status` responds successfully
+- static frontend assets are being served
+- the app can boot without the production database or app startup issues
+
+### Linting
+
+The repository uses ESLint with a shared config in `eslint.config.js`.
+
+Run:
 
 ```bash
-npm run wise:sync --workspace=@cheapdata/api
-npm run wise:test --workspace=@cheapdata/api
-npm run wise:test-mtn --workspace=@cheapdata/api
-npm run wise:test-plans --workspace=@cheapdata/api
-npm run wise:test-pricing --workspace=@cheapdata/api
+npm run lint
 ```
 
-Configure the variables already listed in `.env.example`, including
-`SESSION_SECRET`, `PAYSTACK_SECRET_KEY`, `DB_PATH`, the WiseSub variables, and
-`CHEAPDATA_MARKUP_PERCENT`. Do not put secret values in this document or in
-source control. The default database path is
-`./apps/api/data/cheapdata.db`.
+The configured lint rules help catch undefined variables, duplicate identifiers,
+invalid control flow, and obvious code quality problems.
 
-## Core API areas
+## 10. Current known risks and TODOs
 
-- Authentication: registration, login, logout, session checks, password reset,
-  and purchase PIN management.
-- Wallet: development-only test funding and Paystack payment initialization.
-- Purchases: authenticated data and airtime purchase endpoints, with balance
-  and purchase PIN validation.
-- Transactions: authenticated user transaction history and admin transaction
-  views.
-- Admin: protected platform statistics, user listing, and transaction listing.
-- Provider integration: WiseSub plan synchronization and diagnostic scripts in
-  `apps/api/scripts/`.
+- `SESSION_SECRET` must be configured in production. In development, the app logs
+  a warning and falls back to an insecure value.
+- `/api/test-fund` is a development-only route and should not be active in a
+  production deployment.
+- Paystack wallet funding is only safe when the full verification flow is tested
+  in the target environment.
+- WiseSub scripts need valid credentials and network access; they should not be
+  used casually in a production environment without review.
+- The web frontend is static and served directly. It is not a framework-based
+  app, so if richer state management or a build pipeline is needed later, the
+  front-end architecture will need a separate decision.
+- Current automated coverage is smoke-level only. For production readiness, add
+  route-level tests for authentication, purchase PIN flows, wallet funding,
+  purchases, and admin authorization.
 
-Important routes include `/api/register`, `/api/login`, `/api/logout`,
-`/api/fund-wallet`, `/api/purchase-data`, `/api/purchase-airtime`,
-`/api/forgot-password`, and `/api/reset-password`. Admin routes are under
-`/api/admin/` and require an authenticated administrator session.
+## 11. Verification status
 
-## Known issues and TODOs
+This project has been validated with the following checks:
 
-- `SESSION_SECRET` must be configured before production deployment. Development
-  falls back to an insecure value and logs a warning.
-- `/api/test-fund` is intentionally available only outside production. It must
-  not be used as a real payment flow.
-- Paystack wallet funding requires a valid `PAYSTACK_SECRET_KEY` and a complete
-  payment verification flow in the deployment environment. Test the full
-  redirect and verification path before launch.
-- WiseSub synchronization and diagnostic commands require valid provider
-  credentials and network access. Run them against the intended provider
-  environment before changing production plan data.
-- The local SQLite database is not source-controlled. Provision or restore the
-  database separately when setting up another environment.
-- The web workspace has no build step; its HTML and CSS are served directly by
-  the API. Add a separate frontend build configuration only if the frontend is
-  migrated to a framework.
+- JavaScript syntax checks on project files
+- workspace install (`npm install`)
+- SQLite database read/write validation
+- API smoke test (`npm test`)
+- ESLint validation (`npm run lint`)
+- application boot through the dev command (`npm run dev`)
 
-## Current verification
+The app starts successfully and serves the frontend at `http://localhost:3000`
+without module-resolution or database-path errors under the current setup.
 
-The cleaned workspace has been validated with `node --check` on project
-JavaScript files, `npm install`, a SQLite read/write check, and `npm run dev`.
-The server starts at `http://localhost:3000` without module or database path
-errors.
+## 12. Handover notes
+
+If a teammate takes this work over, the first things to inspect are:
+
+1. `.env` values for secrets and provider credentials
+2. `apps/api/src/config.js` and `DB_PATH` configuration
+3. database state under `apps/api/data/`
+4. Paystack and WiseSub environment-specific configuration
+5. admin route access and session handling
+6. wallet funding and purchase PIN validation flows
+
+The most important ownership boundaries are:
+
+- `app.js` = API wiring
+- `server.js` = launcher
+- `db.js` = data layer
+- `auth.js` = auth policy
+- `config.js` = env config
+- `scripts/` = operations and provider utilities
+- `web/` = frontend UI
+
+This split is now much easier to maintain and safer for future work than the
+single monolithic server file.

@@ -64,6 +64,16 @@ npm start
 The server listens on `PORT` and defaults to `3000`. Open
 `http://localhost:3000` in a browser.
 
+Run the isolated API smoke test with:
+
+```bash
+npm test
+```
+
+Tests run with `NODE_ENV=test` and use a temporary SQLite database at
+`apps/api/data/cheapdata.test.db`. The test database is removed when the test
+finishes, so development data is not modified.
+
 Useful database commands:
 
 ```bash

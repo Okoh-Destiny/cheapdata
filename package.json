@@ -9,6 +9,8 @@
   "scripts": {
     "start": "npm run start --workspace=@cheapdata/api",
     "dev": "npm run dev --workspace=@cheapdata/api",
+    "test": "npm test --workspace=@cheapdata/api",
+    "lint": "eslint .",
     "api": "npm run start --workspace=@cheapdata/api",
     "db:fix": "npm run db:fix --workspace=@cheapdata/api",
     "db:reset-fields": "npm run db:reset-fields --workspace=@cheapdata/api",
@@ -17,5 +19,9 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "eslint": "^10.9.1",
+    "globals": "^17.12.0"
   }
 }

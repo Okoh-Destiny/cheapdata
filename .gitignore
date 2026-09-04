@@ -8,3 +8,5 @@ npm-debug.log*
 *.db-shm
 *.db-wal
 *.db
+.env
+.env.*
