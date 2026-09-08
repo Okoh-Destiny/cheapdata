@@ -12,8 +12,10 @@ const app = express();
 // MIDDLEWARE
 // =========================
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.set("trust proxy", 1);
+
+app.use(express.json({ limit: "50kb" }));
+app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 
 app.use(session({
     secret: process.env.SESSION_SECRET || "dev-only-insecure-secret",
@@ -799,28 +801,24 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
             });
         }
 
-        const dataPlans = {
-            "1GB": 250,
-            "2GB": 500,
-            "5GB": 1250,
-            "10GB": 2500,
-            "20GB": 5000,
-            "40GB": 10000
-        };
+        const selectedPlan = db.prepare(`
+            SELECT id, network, plan, provider_cost, selling_price, active
+            FROM data_plans
+            WHERE network = ?
+              AND plan = ?
+              AND active = 1
+        `).get(network, plan);
 
-        if (
-            !Object.prototype.hasOwnProperty.call(
-                dataPlans,
-                plan
-            )
-        ) {
+        if (!selectedPlan) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid data plan"
+                message: "That data plan is not currently available"
             });
         }
 
-        const price = dataPlans[plan];
+        // IMPORTANT: the selling price comes from the server/database.
+        // Never trust a price sent by the browser.
+        const price = Number(selectedPlan.selling_price);
 
         const user = db.prepare(`
             SELECT
@@ -870,7 +868,7 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
         const transaction =
             db.transaction(() => {
 
-                db.prepare(`
+                const debitResult = db.prepare(`
                     UPDATE users
                     SET balance = balance - ?
                     WHERE id = ?
@@ -880,6 +878,10 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
                     userId,
                     price
                 );
+
+                if (debitResult.changes !== 1) {
+                    throw new Error("Wallet balance changed. Please try again.");
+                }
 
                 db.prepare(`
                     INSERT INTO transactions (
@@ -1050,7 +1052,7 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         const transaction =
             db.transaction(() => {
 
-                db.prepare(`
+                const debitResult = db.prepare(`
                     UPDATE users
                     SET balance = balance - ?
                     WHERE id = ?
@@ -1060,6 +1062,10 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
                     userId,
                     airtimeAmount
                 );
+
+                if (debitResult.changes !== 1) {
+                    throw new Error("Wallet balance changed. Please try again.");
+                }
 
                 db.prepare(`
                     INSERT INTO transactions (
@@ -1156,6 +1162,187 @@ app.get("/api/transactions/:userId", requireAuth, (req, res) => {
             success: false,
             message: "Could not load transactions"
         });
+    }
+});
+
+// =========================
+// DATA PLANS
+// =========================
+
+// Public: customer-facing active WiseSub plans.
+app.get("/api/data-plans", (req, res) => {
+    try {
+        const plans = db.prepare(`
+            SELECT
+                id,
+                network,
+                plan,
+                selling_price,
+                data_size,
+                validity
+            FROM data_plans
+            WHERE active = 1
+              AND source IS NOT NULL
+              AND TRIM(source) <> ''
+            ORDER BY
+                CASE network
+                    WHEN 'MTN' THEN 1
+                    WHEN 'Airtel' THEN 2
+                    WHEN 'Glo' THEN 3
+                    WHEN '9mobile' THEN 4
+                    ELSE 5
+                END,
+                selling_price ASC,
+                id ASC
+        `).all();
+
+        res.json({
+            success: true,
+            plans
+        });
+    } catch (error) {
+        console.error("Data plans error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Could not load data plans"
+        });
+    }
+});
+
+// Admin: active WiseSub plans only.
+app.get("/api/admin/data-plans", requireAuth, requireAdmin, (req, res) => {
+    try {
+        const plans = db.prepare(`
+            SELECT
+                id,
+                network,
+                plan,
+                provider_cost,
+                selling_price,
+                (selling_price - provider_cost) AS margin,
+                active,
+                provider,
+                provider_code,
+                provider_package_code,
+                provider_package_name,
+                data_size,
+                validity,
+                source,
+                last_synced_at,
+                created_at,
+                updated_at
+            FROM data_plans
+            WHERE active = 1
+              AND source IS NOT NULL
+              AND TRIM(source) <> ''
+            ORDER BY
+                CASE network
+                    WHEN 'MTN' THEN 1
+                    WHEN 'Airtel' THEN 2
+                    WHEN 'Glo' THEN 3
+                    WHEN '9mobile' THEN 4
+                    ELSE 5
+                END,
+                selling_price ASC,
+                id ASC
+        `).all();
+
+        res.json({
+            success: true,
+            plans
+        });
+    } catch (error) {
+        console.error("Admin data plans error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Could not load data plans"
+        });
+    }
+});
+
+app.post("/api/admin/data-plans", requireAuth, requireAdmin, (req, res) => {
+    try {
+        const network = String(req.body.network || "").trim();
+        const plan = String(req.body.plan || "").trim();
+        const providerCost = Number(req.body.provider_cost);
+        const sellingPrice = Number(req.body.selling_price);
+        const active = req.body.active === undefined ? 1 : (Number(req.body.active) ? 1 : 0);
+
+        const allowedNetworks = ["MTN", "Airtel", "Glo", "9mobile"];
+        if (!allowedNetworks.includes(network)) {
+            return res.status(400).json({ success: false, message: "Invalid network" });
+        }
+        if (!/^\d+(?:\.\d+)?(?:MB|GB)$/i.test(plan)) {
+            return res.status(400).json({ success: false, message: "Invalid plan format. Example: 1GB or 500MB" });
+        }
+        if (!Number.isFinite(providerCost) || providerCost < 0) {
+            return res.status(400).json({ success: false, message: "Provider cost must be 0 or greater" });
+        }
+        if (!Number.isFinite(sellingPrice) || sellingPrice <= 0) {
+            return res.status(400).json({ success: false, message: "Selling price must be greater than 0" });
+        }
+        if (sellingPrice < providerCost) {
+            return res.status(400).json({ success: false, message: "Selling price cannot be below provider cost" });
+        }
+
+        const result = db.prepare(`
+            INSERT INTO data_plans (network, plan, provider_cost, selling_price, active, updated_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(network, plan) DO UPDATE SET
+                provider_cost = excluded.provider_cost,
+                selling_price = excluded.selling_price,
+                active = excluded.active,
+                updated_at = CURRENT_TIMESTAMP
+        `).run(network, plan.toUpperCase(), providerCost, sellingPrice, active);
+
+        const saved = db.prepare(`SELECT id, network, plan, provider_cost, selling_price, active,
+            (selling_price - provider_cost) AS margin, updated_at
+            FROM data_plans WHERE network = ? AND plan = ?`).get(network, plan.toUpperCase());
+
+        res.json({ success: true, message: "Data plan saved successfully", plan: saved });
+    } catch (error) {
+        console.error("Save data plan error:", error);
+        res.status(500).json({ success: false, message: "Could not save data plan" });
+    }
+});
+
+app.patch("/api/admin/data-plans/:id", requireAuth, requireAdmin, (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ success: false, message: "Invalid plan ID" });
+        }
+
+        const current = db.prepare(`SELECT * FROM data_plans WHERE id = ?`).get(id);
+        if (!current) return res.status(404).json({ success: false, message: "Data plan not found" });
+
+        const providerCost = req.body.provider_cost === undefined ? Number(current.provider_cost) : Number(req.body.provider_cost);
+        const sellingPrice = req.body.selling_price === undefined ? Number(current.selling_price) : Number(req.body.selling_price);
+        const active = req.body.active === undefined ? Number(current.active) : (Number(req.body.active) ? 1 : 0);
+
+        if (!Number.isFinite(providerCost) || providerCost < 0 || !Number.isFinite(sellingPrice) || sellingPrice <= 0) {
+            return res.status(400).json({ success: false, message: "Invalid pricing values" });
+        }
+        if (sellingPrice < providerCost) {
+            return res.status(400).json({ success: false, message: "Selling price cannot be below provider cost" });
+        }
+
+        db.prepare(`
+            UPDATE data_plans
+            SET provider_cost = ?, selling_price = ?, active = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(providerCost, sellingPrice, active, id);
+
+        const saved = db.prepare(`SELECT id, network, plan, provider_cost, selling_price, active,
+            (selling_price - provider_cost) AS margin, updated_at
+            FROM data_plans WHERE id = ?`).get(id);
+
+        res.json({ success: true, message: "Data plan updated successfully", plan: saved });
+    } catch (error) {
+        console.error("Update data plan error:", error);
+        res.status(500).json({ success: false, message: "Could not update data plan" });
     }
 });
 
@@ -1556,6 +1743,7 @@ app.post("/api/fund-wallet", requireAuth, async (req, res) => {
                     amount: String(amountInKobo),
                     currency: "NGN",
                     reference: reference,
+                    callback_url: `${req.protocol}://${req.get("host")}/fund-wallet.html`,
 
                     metadata: {
                         user_id: String(user.id),
@@ -1585,6 +1773,23 @@ app.post("/api/fund-wallet", requireAuth, async (req, res) => {
             });
         }
 
+        // Record the funding attempt before sending the customer to Paystack.
+        // The wallet is NOT credited here. Credit happens only after server-side
+        // verification in /api/fund-wallet/verify.
+        db.prepare(`
+            INSERT INTO transactions (
+                user_id, type, amount, status, reference, description
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+            user.id,
+            "wallet_funding",
+            fundingAmount,
+            "pending",
+            paystackData.data.reference,
+            "Paystack wallet funding"
+        );
+
         return res.json({
             success: true,
             message: "Payment initialized successfully.",
@@ -1607,6 +1812,145 @@ app.post("/api/fund-wallet", requireAuth, async (req, res) => {
             success: false,
             message:
                 "Unable to initialize payment. Please try again."
+        });
+    }
+});
+
+// =========================
+// VERIFY PAYSTACK WALLET FUNDING
+// =========================
+
+app.post("/api/fund-wallet/verify", requireAuth, async (req, res) => {
+    try {
+        const reference = String(req.body.reference || "").trim();
+
+        if (!reference || reference.length > 100) {
+            return res.status(400).json({
+                success: false,
+                message: "A valid payment reference is required."
+            });
+        }
+
+        if (!process.env.PAYSTACK_SECRET_KEY) {
+            return res.status(500).json({
+                success: false,
+                message: "Payment system is not configured yet."
+            });
+        }
+
+        const transaction = db.prepare(`
+            SELECT id, user_id, amount, status, reference
+            FROM transactions
+            WHERE reference = ?
+              AND type = 'wallet_funding'
+              AND user_id = ?
+            LIMIT 1
+        `).get(reference, req.session.userId);
+
+        if (!transaction) {
+            return res.status(404).json({
+                success: false,
+                message: "Funding transaction not found."
+            });
+        }
+
+        // Idempotency: never credit an already-successful payment twice.
+        if (transaction.status === "successful") {
+            const user = db.prepare(`SELECT balance FROM users WHERE id = ?`).get(req.session.userId);
+            return res.json({
+                success: true,
+                message: "Payment has already been credited.",
+                balance: user.balance,
+                reference
+            });
+        }
+
+        const paystackResponse = await fetch(
+            `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+            {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+                }
+            }
+        );
+
+        const paystackData = await paystackResponse.json();
+
+        if (!paystackResponse.ok || !paystackData.status || !paystackData.data) {
+            return res.status(400).json({
+                success: false,
+                message: paystackData.message || "Unable to verify payment."
+            });
+        }
+
+        const payment = paystackData.data;
+        const expectedAmount = Math.round(Number(transaction.amount) * 100);
+        const paidAmount = Number(payment.amount);
+        const metadataUserId = String(
+            payment.metadata && payment.metadata.user_id || ""
+        );
+
+        if (
+            payment.status !== "success" ||
+            payment.currency !== "NGN" ||
+            paidAmount !== expectedAmount ||
+            metadataUserId !== String(req.session.userId) ||
+            String(payment.reference) !== reference
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment could not be verified as a valid CheapData wallet funding."
+            });
+        }
+
+        const credit = db.transaction(() => {
+            const current = db.prepare(`
+                SELECT status, user_id, amount
+                FROM transactions
+                WHERE id = ?
+            `).get(transaction.id);
+
+            if (!current || current.status === "successful") {
+                return false;
+            }
+
+            db.prepare(`
+                UPDATE users
+                SET balance = balance + ?
+                WHERE id = ?
+            `).run(current.amount, current.user_id);
+
+            db.prepare(`
+                UPDATE transactions
+                SET status = 'successful',
+                    description = ?
+                WHERE id = ?
+            `).run(
+                "Verified Paystack wallet funding",
+                transaction.id
+            );
+
+            return true;
+        });
+
+        const credited = credit();
+        const user = db.prepare(`SELECT balance FROM users WHERE id = ?`).get(req.session.userId);
+
+        return res.json({
+            success: true,
+            message: credited
+                ? "Payment verified and wallet credited successfully."
+                : "Payment has already been credited.",
+            balance: user.balance,
+            amount: transaction.amount,
+            reference
+        });
+    } catch (error) {
+        console.error("Paystack verification error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Unable to verify payment right now. Please try again."
         });
     }
 });

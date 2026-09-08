@@ -186,6 +186,39 @@
             color: #6b7280;
         }
 
+        .plan-form {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .plan-form input, .plan-form select {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .save-btn, .toggle-btn {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 14px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .save-btn { background: #0b7a3b; color: white; }
+        .toggle-btn { background: #e5e7eb; color: #374151; }
+        .plans-table input { width: 110px; padding: 8px; border: 1px solid #d1d5db; border-radius: 7px; }
+        .badge-inactive { background: #e5e7eb; color: #4b5563; }
+        .margin { font-weight: bold; }
+
+        @media (max-width: 900px) {
+            .plan-form { grid-template-columns: 1fr 1fr; }
+        }
+
         @media (max-width: 1100px) {
             .stats {
                 grid-template-columns: repeat(3, 1fr);
@@ -273,6 +306,35 @@
 
     </div>
 
+
+
+    <!-- DATA PRICING -->
+    <div class="section">
+        <h2>Data Pricing</h2>
+        <p style="color:#6b7280;margin-bottom:18px;">Provider cost is what CheapData pays. Selling price is what the customer pays. The server uses selling price from this database.</p>
+
+        <form id="planForm" class="plan-form" onsubmit="savePlan(event)">
+            <select id="planNetwork" required>
+                <option value="MTN">MTN</option>
+                <option value="Airtel">Airtel</option>
+                <option value="Glo">Glo</option>
+                <option value="9mobile">9mobile</option>
+            </select>
+            <input id="planName" placeholder="Plan e.g. 1GB" required>
+            <input id="providerCost" type="number" min="0" step="0.01" placeholder="Provider cost" required>
+            <input id="sellingPrice" type="number" min="1" step="0.01" placeholder="Selling price" required>
+            <button class="save-btn" type="submit">Save Plan</button>
+        </form>
+
+        <div class="table-container">
+            <table class="plans-table">
+                <thead>
+                    <tr><th>Network</th><th>Plan</th><th>Provider Cost</th><th>Selling Price</th><th>Margin</th><th>Status</th><th>Action</th></tr>
+                </thead>
+                <tbody id="plansTable"><tr><td colspan="7" class="empty">Loading data plans...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
 
     <!-- USERS -->
 
@@ -417,6 +479,82 @@
 
 
     // =========================
+    // DATA PRICING
+    // =========================
+
+    async function loadPlans() {
+        const response = await fetch("/api/admin/data-plans");
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.message || "Could not load data plans.");
+
+        const table = document.getElementById("plansTable");
+        if (!data.plans.length) {
+            table.innerHTML = `<tr><td colspan="7" class="empty">No data plans found.</td></tr>`;
+            return;
+        }
+
+        table.innerHTML = data.plans.map(plan => `
+            <tr>
+                <td>${escapeHtml(plan.network)}</td>
+                <td><strong>${escapeHtml(plan.plan)}</strong></td>
+                <td><input id="cost-${plan.id}" type="number" min="0" step="0.01" value="${Number(plan.provider_cost)}"></td>
+                <td><input id="price-${plan.id}" type="number" min="1" step="0.01" value="${Number(plan.selling_price)}"></td>
+                <td class="margin">${formatMoney(plan.margin)}</td>
+                <td><span class="badge ${Number(plan.active) ? "badge-success" : "badge-inactive"}">${Number(plan.active) ? "Active" : "Inactive"}</span></td>
+                <td><button class="toggle-btn" onclick="updatePlan(${plan.id}, ${Number(plan.active) ? 0 : 1})">${Number(plan.active) ? "Disable" : "Enable"}</button> <button class="save-btn" onclick="saveExistingPlan(${plan.id})">Save</button></td>
+            </tr>
+        `).join("");
+    }
+
+    async function savePlan(event) {
+        event.preventDefault();
+        const payload = {
+            network: document.getElementById("planNetwork").value,
+            plan: document.getElementById("planName").value.trim(),
+            provider_cost: Number(document.getElementById("providerCost").value),
+            selling_price: Number(document.getElementById("sellingPrice").value),
+            active: 1
+        };
+
+        try {
+            const response = await fetch("/api/admin/data-plans", {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || "Could not save plan.");
+            showMessage(data.message, "success");
+            document.getElementById("planForm").reset();
+            await loadPlans();
+        } catch (error) { showMessage(error.message, "error"); }
+    }
+
+    async function updatePlan(id, active) {
+        try {
+            const response = await fetch(`/api/admin/data-plans/${id}`, {
+                method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || "Could not update plan.");
+            showMessage(data.message, "success");
+            await loadPlans();
+        } catch (error) { showMessage(error.message, "error"); }
+    }
+
+    async function saveExistingPlan(id) {
+        const providerCost = Number(document.getElementById(`cost-${id}`).value);
+        const sellingPrice = Number(document.getElementById(`price-${id}`).value);
+        try {
+            const response = await fetch(`/api/admin/data-plans/${id}`, {
+                method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider_cost: providerCost, selling_price: sellingPrice })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || "Could not save pricing.");
+            showMessage(data.message, "success");
+            await loadPlans();
+        } catch (error) { showMessage(error.message, "error"); }
+    }
+
+    // =========================
     // LOAD ADMIN
     // =========================
 
@@ -506,7 +644,8 @@
             await Promise.all([
                 loadStats(user.id),
                 loadUsers(user.id),
-                loadTransactions(user.id)
+                loadTransactions(user.id),
+                loadPlans()
             ]);
 
         }

@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-```
 <title>Fund Wallet - CheapData</title>
 
 <style>
@@ -205,13 +204,11 @@
         }
     }
 </style>
-```
 
 </head>
 
 <body>
 
-```
 <header class="header">
     <div class="logo">CheapData</div>
 
@@ -509,10 +506,42 @@
 
     });
 
+    async function verifyReturnedPayment() {
+        const params = new URLSearchParams(window.location.search);
+        const reference = params.get("reference");
+
+        if (!reference) return;
+
+        showMessage("Verifying your payment...", "success");
+
+        try {
+            const response = await fetch("/api/fund-wallet/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reference })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                balanceDisplay.textContent = formatNaira(data.balance);
+                showMessage(data.message, "success");
+                amountInput.value = "";
+            } else {
+                showMessage(data.message || "Payment verification failed.", "error");
+            }
+        } catch (error) {
+            console.error("Payment verification error:", error);
+            showMessage("Unable to verify payment right now. Please try again.", "error");
+        } finally {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }
+
     loadBalance();
+    verifyReturnedPayment();
 
 </script>
-```
 
 </body>
 </html>

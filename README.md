@@ -113,3 +113,7 @@ SQLite journal files are ignored by Git.
 Set a strong `SESSION_SECRET` in production. The API refuses to start in
 production when it is missing. Do not expose Paystack or WiseSub credentials in
 frontend code, documentation, logs, or commits.
+
+### Wallet funding verification
+
+Wallet funding uses a two-step flow. `/api/fund-wallet` initializes Paystack and records a pending transaction. After checkout, the frontend sends the returned reference to `/api/fund-wallet/verify`; the server verifies the payment with Paystack before crediting the wallet.

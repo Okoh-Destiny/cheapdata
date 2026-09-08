@@ -238,6 +238,7 @@ The database setup includes:
 
 - `users` table
 - `transactions` table
+- `data_plans` table with customer pricing plus WiseSub provider metadata
 - schema migration checks for missing fields such as:
   - `purchase_pin`
   - `virtual_account_number`
@@ -352,3 +353,16 @@ The most important ownership boundaries are:
 
 This split is now much easier to maintain and safer for future work than the
 single monolithic server file.
+## 13. Latest upgrade in this package
+
+The current package adds the missing server-side Paystack wallet crediting flow:
+
+- `/api/fund-wallet` initializes a Paystack payment and records it as `pending`.
+- `/api/fund-wallet/verify` verifies the reference directly with Paystack.
+- The wallet is credited only after the server confirms `success`, NGN currency, exact amount, matching reference, and matching user metadata.
+- Verification is idempotent, so refreshing the callback cannot credit the same payment twice.
+- `fund-wallet.html` automatically verifies a returned Paystack reference.
+- Request body limits were added and proxy trust is configured for hosted HTTPS environments.
+- Accidental Markdown code fences were removed from the static HTML pages.
+
+Important: data and airtime purchase endpoints still record a successful debit locally; they do not yet call WiseSub to actually deliver the purchased service. The next major production step is to introduce a provider purchase layer with pending/success/failed states, provider references, and safe refund handling.

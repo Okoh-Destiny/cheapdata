@@ -3,10 +3,7 @@ const Database = require("better-sqlite3");
 const path = require("path");
 require("dotenv").config();
 
-const dbPath =
-    process.env.DB_PATH ||
-    path.join(__dirname, "../data/cheapdata.db");
-
+const dbPath = process.env.DB_PATH || path.join(__dirname, "../data/cheapdata.db");
 const db = new Database(dbPath);
 
 const BASE_URL =
@@ -24,59 +21,30 @@ function getHeaders() {
     return {
         Authorization: `Bearer ${process.env.WISESUB_API_KEY || ""}`,
         "X-API-Secret": process.env.WISESUB_API_SECRET || "",
-        "X-Environment":
-            process.env.WISESUB_ENVIRONMENT || "test",
+        "X-Environment": process.env.WISESUB_ENVIRONMENT || "test",
         Accept: "application/json"
     };
 }
 
-/*
- * CheapData pricing:
- *
- * WiseSub cost + 2% markup
- *
- * We round UP to the next whole naira.
- *
- * Examples:
- * ₦98.20  -> ₦101
- * ₦196.40 -> ₦201
- * ₦589.20 -> ₦601
- * ₦785.60 -> ₦802
- * ₦982    -> ₦1002
- */
 function calculateSellingPrice(providerCost) {
     const markupPercent = Number(
-        process.env.CHEAPDATA_MARKUP_PERCENT || 2
+        process.env.CHEAPDATA_MARKUP_PERCENT || 5
     );
 
-    const cost = Number(providerCost);
-
-    if (!Number.isFinite(cost) || cost <= 0) {
-        return 0;
-    }
-
-    const markedUpPrice =
-        cost * (1 + markupPercent / 100);
-
-    return Math.ceil(markedUpPrice);
+    return Math.ceil(
+        Number(providerCost) * (1 + markupPercent / 100)
+    );
 }
 
 /*
- * Only allow actual data bundles.
- *
- * We exclude airtime, voice, social and
- * entertainment-type packages.
+ * We only want actual data bundles.
+ * Exclude airtime-like, voice, social and entertainment packages.
  */
 function isValidDataPackage(packageName) {
-    const name = String(packageName || "")
-        .toLowerCase()
-        .trim();
+    const name = String(packageName || "").toLowerCase();
 
     const excludedWords = [
         "xtratalk",
-        "xtra talk",
-        "xtradata",
-        "xtra data",
         "voice",
         "airtime",
         "tv",
@@ -91,101 +59,19 @@ function isValidDataPackage(packageName) {
         "wtf"
     ];
 
-    if (
-        excludedWords.some(word =>
-            name.includes(word)
-        )
-    ) {
+    if (excludedWords.some(word => name.includes(word))) {
         return false;
     }
 
     return (
-        name.includes("kb") ||
         name.includes("mb") ||
         name.includes("gb") ||
         name.includes("tb")
     );
 }
 
-/*
- * Clean the package name shown to customers.
- */
-function cleanPlanName(packageName) {
-    let name = String(packageName || "").trim();
-
-    name = name
-        .replace(/^N[\d,]+\s*/i, "")
-        .trim();
-
-    return name || String(packageName || "").trim();
-}
-
-/*
- * Extract data size.
- */
-function extractDataSize(planName) {
-    const match = String(planName || "").match(
-        /(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)/i
-    );
-
-    return match ? match[0] : "";
-}
-
-/*
- * Extract validity.
- */
-function extractValidity(planName) {
-    const match = String(planName || "").match(
-        /(\d+)\s*(hour|hours|hr|hrs|day|days|week|weeks|month|months|year|years)/i
-    );
-
-    return match ? match[0] : "";
-}
-
-/*
- * Deactivate packages that should not appear
- * in the CheapData customer catalog.
- */
-function deactivateInvalidPackages(networkName) {
-    const storedPlans = db.prepare(`
-        SELECT
-            id,
-            plan,
-            provider_package_name
-        FROM data_plans
-        WHERE network = ?
-          AND source = 'wisesub'
-          AND active = 1
-    `).all(networkName);
-
-    let deactivated = 0;
-
-    for (const plan of storedPlans) {
-        const packageName =
-            plan.provider_package_name ||
-            plan.plan ||
-            "";
-
-        if (!isValidDataPackage(packageName)) {
-            db.prepare(`
-                UPDATE data_plans
-                SET
-                    active = 0,
-                    updated_at = datetime('now')
-                WHERE id = ?
-            `).run(plan.id);
-
-            deactivated++;
-        }
-    }
-
-    return deactivated;
-}
-
 async function syncNetwork(network) {
-    console.log(
-        `\n================ ${network.name} ================`
-    );
+    console.log(`\n================ ${network.name} ================`);
 
     try {
         const response = await axios.get(
@@ -203,33 +89,11 @@ async function syncNetwork(network) {
         const packages =
             response.data?.data?.packages || [];
 
-        console.log(
-            `WiseSub packages received: ${packages.length}`
-        );
-
-        if (!Array.isArray(packages)) {
-            console.log(
-                "❌ Invalid package response from WiseSub."
-            );
-
-            return {
-                added: 0,
-                updated: 0,
-                skipped: 0,
-                deactivated: 0,
-                failed: 1
-            };
-        }
+        console.log(`WiseSub packages received: ${packages.length}`);
 
         let added = 0;
         let updated = 0;
         let skipped = 0;
-
-        /*
-         * Keep track of valid packages returned
-         * by WiseSub during this successful sync.
-         */
-        const validPackageCodes = new Set();
 
         for (const pkg of packages) {
             const packageCode = String(
@@ -257,22 +121,52 @@ async function syncNetwork(network) {
                 continue;
             }
 
-            validPackageCodes.add(packageCode);
-
             const sellingPrice =
                 calculateSellingPrice(providerCost);
 
-            const cleanName =
-                cleanPlanName(packageName);
+            /*
+             * Extract a cleaner plan name.
+             *
+             * Example:
+             * "N600 2.5GB - 2 days"
+             * becomes:
+             * "2.5GB - 2 days"
+             */
+            let cleanPlanName = packageName
+                .replace(/^N[\d,]+\s*/i, "")
+                .trim();
 
-            const dataSize =
-                extractDataSize(cleanName);
-
-            const validity =
-                extractValidity(cleanName);
+            if (!cleanPlanName) {
+                cleanPlanName = packageName;
+            }
 
             /*
-             * First check by WiseSub package code.
+             * Try to determine the data size.
+             */
+            const sizeMatch = cleanPlanName.match(
+                /(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)/i
+            );
+
+            const dataSize = sizeMatch
+                ? sizeMatch[0]
+                : cleanPlanName;
+
+            /*
+             * Extract validity when possible.
+             */
+            let validity = "";
+
+            const validityMatch = cleanPlanName.match(
+                /(\d+)\s*(hour|hours|hr|hrs|day|days|week|weeks|month|months|year|years)/i
+            );
+
+            if (validityMatch) {
+                validity = validityMatch[0];
+            }
+
+            /*
+             * First look for an existing record
+             * using the WiseSub package code.
              */
             const existingByCode = db.prepare(`
                 SELECT id
@@ -289,22 +183,21 @@ async function syncNetwork(network) {
                 db.prepare(`
                     UPDATE data_plans
                     SET
-                        plan = ?,
+                        plan_name = ?,
                         data_size = ?,
                         provider_cost = ?,
                         selling_price = ?,
-                        active = 1,
+                        status = 1,
                         provider = 'wisesub',
                         provider_code = ?,
                         provider_package_code = ?,
                         provider_package_name = ?,
                         validity = ?,
                         source = 'wisesub',
-                        last_synced_at = datetime('now'),
-                        updated_at = datetime('now')
+                        last_synced_at = datetime('now')
                     WHERE id = ?
                 `).run(
-                    cleanName,
+                    cleanPlanName,
                     dataSize,
                     providerCost,
                     sellingPrice,
@@ -320,19 +213,22 @@ async function syncNetwork(network) {
             }
 
             /*
-             * Check by network + plan name.
+             * Because data_plans has:
              *
-             * This prevents duplicate plans.
+             * UNIQUE(network, plan_name)
+             *
+             * we must also check whether the cleaned
+             * plan name already exists.
              */
             const existingByName = db.prepare(`
                 SELECT id
                 FROM data_plans
                 WHERE network = ?
-                  AND plan = ?
+                  AND plan_name = ?
                 LIMIT 1
             `).get(
                 network.name,
-                cleanName
+                cleanPlanName
             );
 
             if (existingByName) {
@@ -342,15 +238,14 @@ async function syncNetwork(network) {
                         data_size = ?,
                         provider_cost = ?,
                         selling_price = ?,
-                        active = 1,
+                        status = 1,
                         provider = 'wisesub',
                         provider_code = ?,
                         provider_package_code = ?,
                         provider_package_name = ?,
                         validity = ?,
                         source = 'wisesub',
-                        last_synced_at = datetime('now'),
-                        updated_at = datetime('now')
+                        last_synced_at = datetime('now')
                     WHERE id = ?
                 `).run(
                     dataSize,
@@ -368,87 +263,57 @@ async function syncNetwork(network) {
             }
 
             /*
-             * Brand-new WiseSub package.
+             * Brand-new package.
              */
             db.prepare(`
                 INSERT INTO data_plans (
                     network,
-                    plan,
+                    plan_name,
                     data_size,
                     provider_cost,
                     selling_price,
-                    active,
+                    status,
                     provider,
                     provider_code,
                     provider_package_code,
                     provider_package_name,
                     validity,
                     source,
-                    last_synced_at,
-                    updated_at
+                    last_synced_at
                 )
-                VALUES (
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    1,
-                    'wisesub',
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    'wisesub',
-                    datetime('now'),
-                    datetime('now')
-                )
+                VALUES (?, ?, ?, ?, ?, 1, 'wisesub', ?, ?, ?, ?, ?, datetime('now'))
             `).run(
                 network.name,
-                cleanName,
+                cleanPlanName,
                 dataSize,
                 providerCost,
                 sellingPrice,
                 network.code,
                 packageCode,
                 packageName,
-                validity
+                validity,
+                "wisesub"
             );
 
             added++;
         }
 
-        /*
-         * Remove invalid packages that may have been
-         * stored during an earlier synchronization.
-         */
-        const deactivated =
-            deactivateInvalidPackages(network.name);
-
-        console.log(`Added:        ${added}`);
-        console.log(`Updated:      ${updated}`);
-        console.log(`Skipped:      ${skipped}`);
-        console.log(`Deactivated:  ${deactivated}`);
+        console.log(`Added:   ${added}`);
+        console.log(`Updated: ${updated}`);
+        console.log(`Skipped: ${skipped}`);
 
         return {
             added,
             updated,
             skipped,
-            deactivated,
             failed: 0
         };
 
     } catch (error) {
-        console.log(
-            `❌ ${network.name} sync failed`
-        );
+        console.log(`❌ ${network.name} sync failed`);
 
         if (error.response) {
-            console.log(
-                "HTTP Status:",
-                error.response.status
-            );
-
+            console.log("HTTP Status:", error.response.status);
             console.log(
                 "Response:",
                 JSON.stringify(
@@ -468,40 +333,24 @@ async function syncNetwork(network) {
             added: 0,
             updated: 0,
             skipped: 0,
-            deactivated: 0,
             failed: 1
         };
     }
 }
 
 async function main() {
-    console.log(
-        "🚀 CheapData WiseSub Data Plan Sync"
-    );
-
-    console.log(
-        "===================================="
-    );
+    console.log("🚀 CheapData WiseSub Data Plan Sync");
+    console.log("====================================");
 
     if (!process.env.WISESUB_API_KEY) {
-        console.error(
-            "❌ WISESUB_API_KEY is missing from .env"
-        );
-
+        console.error("❌ WISESUB_API_KEY is missing from .env");
         process.exit(1);
     }
 
     if (!process.env.WISESUB_API_SECRET) {
-        console.error(
-            "❌ WISESUB_API_SECRET is missing from .env"
-        );
-
+        console.error("❌ WISESUB_API_SECRET is missing from .env");
         process.exit(1);
     }
-
-    const markupPercent = Number(
-        process.env.CHEAPDATA_MARKUP_PERCENT || 2
-    );
 
     console.log(
         "Environment:",
@@ -513,115 +362,58 @@ async function main() {
         BASE_URL
     );
 
-    console.log(
-        "CheapData markup:",
-        `${markupPercent}%`
-    );
-
-    console.log(
-        "Pricing:",
-        "Markup + round UP to whole naira"
-    );
-
     const totals = {
         added: 0,
         updated: 0,
         skipped: 0,
-        deactivated: 0,
         failed: 0
     };
 
     for (const network of NETWORKS) {
-        const result =
-            await syncNetwork(network);
+        const result = await syncNetwork(network);
 
         totals.added += result.added;
         totals.updated += result.updated;
         totals.skipped += result.skipped;
-        totals.deactivated +=
-            result.deactivated;
         totals.failed += result.failed;
     }
 
-    console.log(
-        "\n===================================="
-    );
-
-    console.log(
-        "✅ SYNC FINISHED"
-    );
-
-    console.log(
-        "===================================="
-    );
-
-    console.log(
-        "Added:        ",
-        totals.added
-    );
-
-    console.log(
-        "Updated:      ",
-        totals.updated
-    );
-
-    console.log(
-        "Skipped:      ",
-        totals.skipped
-    );
-
-    console.log(
-        "Deactivated:  ",
-        totals.deactivated
-    );
-
-    console.log(
-        "Failed:       ",
-        totals.failed
-    );
+    console.log("\n====================================");
+    console.log("✅ SYNC FINISHED");
+    console.log("====================================");
+    console.log("Added:   ", totals.added);
+    console.log("Updated: ", totals.updated);
+    console.log("Skipped: ", totals.skipped);
+    console.log("Failed:  ", totals.failed);
 
     /*
-     * Show active WiseSub plans.
+     * Show the plans currently stored in CheapData.
      */
     const plans = db.prepare(`
         SELECT
             id,
             network,
-            plan,
+            plan_name,
             provider_cost,
             selling_price,
             provider_package_code
         FROM data_plans
         WHERE source = 'wisesub'
-          AND active = 1
+          AND status = 1
         ORDER BY
-            CASE network
-                WHEN 'MTN' THEN 1
-                WHEN 'Airtel' THEN 2
-                WHEN 'Glo' THEN 3
-                WHEN '9mobile' THEN 4
-                ELSE 5
-            END,
-            selling_price ASC,
-            id ASC
+            network,
+            selling_price ASC
     `).all();
 
-    console.log(
-        "\n📦 ACTIVE WISESUB PLANS IN CHEAPDATA"
-    );
-
-    console.log(
-        "===================================="
-    );
+    console.log("\n📦 ACTIVE WISESUB PLANS IN CHEAPDATA");
+    console.log("====================================");
 
     if (plans.length === 0) {
-        console.log(
-            "No active WiseSub plans were added."
-        );
+        console.log("No active WiseSub plans were added.");
     } else {
         for (const plan of plans) {
             console.log(
-                `${plan.network} | ${plan.plan} | Provider ₦${plan.provider_cost} | Sell ₦${plan.selling_price} | ${plan.provider_package_code}`
+                `${plan.network} | ${plan.plan_name} | Provider ₦${plan.provider_cost} | Sell ₦${plan.selling_price} | ${plan.provider_package_code}`
             );
         }
     }
@@ -634,13 +426,8 @@ async function main() {
 }
 
 main().catch(error => {
-    console.error(
-        "❌ Sync crashed:"
-    );
-
+    console.error("❌ Sync crashed:");
     console.error(error);
-
     db.close();
-
     process.exit(1);
 });
