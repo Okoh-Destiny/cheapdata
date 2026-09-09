@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>Fund Wallet - CheapData</title>
 
@@ -16,24 +15,23 @@
     }
 
     body {
-        min-height: 100vh;
-        background: #f5f7f6;
+        background: #f4f7f5;
         color: #222;
+        min-height: 100vh;
     }
 
     .header {
-        background: #071a12;
+        background: #0b7a3b;
         color: white;
-        padding: 18px 25px;
+        padding: 18px 20px;
         display: flex;
-        align-items: center;
         justify-content: space-between;
+        align-items: center;
     }
 
     .logo {
-        font-size: 25px;
+        font-size: 22px;
         font-weight: bold;
-        color: #39d98a;
     }
 
     .back {
@@ -42,62 +40,82 @@
         font-size: 14px;
     }
 
-    .back:hover {
-        text-decoration: underline;
-    }
-
     .container {
         width: 100%;
-        max-width: 500px;
-        margin: 45px auto;
-        padding: 20px;
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 0 15px;
     }
 
     .card {
         background: white;
-        border-radius: 18px;
-        padding: 30px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        border-radius: 14px;
+        padding: 30px 25px;
+        box-shadow: 0 5px 25px rgba(0,0,0,0.08);
     }
 
     h1 {
-        text-align: center;
         font-size: 26px;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
     }
 
     .subtitle {
-        text-align: center;
-        color: #777;
-        font-size: 14px;
-        margin-bottom: 25px;
+        color: #666;
         line-height: 1.5;
+        margin-bottom: 25px;
     }
 
     .balance-box {
-        background: #071a12;
+        background: #0b7a3b;
         color: white;
-        border-radius: 14px;
+        border-radius: 12px;
         padding: 20px;
-        text-align: center;
         margin-bottom: 25px;
     }
 
     .balance-label {
-        font-size: 13px;
-        color: #b8c8c0;
-        margin-bottom: 7px;
+        font-size: 14px;
+        opacity: 0.9;
+        margin-bottom: 8px;
     }
 
     .balance {
         font-size: 30px;
         font-weight: bold;
-        color: #39d98a;
+    }
+
+    .message {
+        display: none;
+        padding: 12px 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    .message.success {
+        display: block;
+        background: #e8f7ed;
+        color: #08752f;
+        border: 1px solid #b8e5c6;
+    }
+
+    .message.error {
+        display: block;
+        background: #fff0f0;
+        color: #b00020;
+        border: 1px solid #f0b5bd;
+    }
+
+    .message.info {
+        display: block;
+        background: #eef6ff;
+        color: #145a9c;
+        border: 1px solid #bfdaf5;
     }
 
     label {
         display: block;
-        font-size: 14px;
         font-weight: bold;
         margin-bottom: 8px;
     }
@@ -105,53 +123,52 @@
     .amount-input {
         width: 100%;
         padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 10px;
         font-size: 18px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
         outline: none;
-        margin-bottom: 18px;
     }
 
     .amount-input:focus {
-        border-color: #0a8f4d;
-        box-shadow: 0 0 0 3px rgba(10, 143, 77, 0.1);
+        border-color: #0b7a3b;
     }
 
     .quick-amounts {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 10px;
-        margin-bottom: 22px;
+        margin: 15px 0 22px;
     }
 
     .quick-btn {
-        padding: 11px 5px;
-        border: 1px solid #0a8f4d;
+        border: 1px solid #0b7a3b;
         background: white;
-        color: #0a8f4d;
-        border-radius: 9px;
-        font-weight: bold;
+        color: #0b7a3b;
+        padding: 11px 5px;
+        border-radius: 7px;
         cursor: pointer;
+        font-weight: bold;
     }
 
     .quick-btn:hover {
-        background: #e8f8ef;
+        background: #0b7a3b;
+        color: white;
     }
 
     .fund-btn {
         width: 100%;
-        padding: 15px;
         border: none;
-        border-radius: 10px;
-        background: #0a8f4d;
+        background: #0b7a3b;
         color: white;
+        padding: 16px;
+        border-radius: 8px;
         font-size: 16px;
         font-weight: bold;
         cursor: pointer;
     }
 
     .fund-btn:hover {
-        background: #087a41;
+        background: #096631;
     }
 
     .fund-btn:disabled {
@@ -159,48 +176,42 @@
         cursor: not-allowed;
     }
 
-    .message {
-        display: none;
-        padding: 12px;
-        border-radius: 9px;
-        margin-bottom: 18px;
-        font-size: 14px;
-        line-height: 1.5;
-    }
-
-    .message.error {
-        display: block;
-        background: #fdecec;
-        color: #c62828;
-    }
-
-    .message.success {
-        display: block;
-        background: #e8f8ef;
-        color: #087a41;
-    }
-
     .info {
-        margin-top: 20px;
-        padding: 14px;
+        margin-top: 25px;
         background: #f5f7f6;
-        border-radius: 10px;
-        color: #666;
+        border-radius: 8px;
+        padding: 15px;
+        color: #555;
         font-size: 13px;
         line-height: 1.6;
     }
 
-    .info strong {
-        color: #333;
+    .loader {
+        display: none;
+        text-align: center;
+        padding: 20px 0;
+        color: #555;
     }
 
     @media (max-width: 500px) {
         .container {
-            margin: 25px auto;
+            margin: 20px auto;
         }
 
         .card {
             padding: 24px 20px;
+        }
+
+        .quick-amounts {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        h1 {
+            font-size: 23px;
+        }
+
+        .balance {
+            font-size: 26px;
         }
     }
 </style>
@@ -210,12 +221,17 @@
 <body>
 
 <header class="header">
-    <div class="logo">CheapData</div>
+
+    <div class="logo">
+        CheapData
+    </div>
 
     <a href="dashboard.html" class="back">
         ← Dashboard
     </a>
+
 </header>
+
 
 <main class="container">
 
@@ -228,15 +244,26 @@
             to purchase data and airtime.
         </p>
 
+
         <div class="balance-box">
-            <div class="balance-label">Current Wallet Balance</div>
+
+            <div class="balance-label">
+                Current Wallet Balance
+            </div>
 
             <div class="balance" id="balance">
                 ₦0.00
             </div>
+
         </div>
 
+
         <div id="message" class="message"></div>
+
+        <div id="loader" class="loader">
+            Checking payment...
+        </div>
+
 
         <form id="fundForm">
 
@@ -254,6 +281,7 @@
                 step="1"
                 required
             >
+
 
             <div class="quick-amounts">
 
@@ -307,6 +335,7 @@
 
             </div>
 
+
             <button
                 type="submit"
                 class="fund-btn"
@@ -317,16 +346,21 @@
 
         </form>
 
+
         <div class="info">
+
             <strong>Secure Payment</strong><br>
+
             Your payment will be processed securely through Paystack.
             CheapData will only credit your wallet after the payment
             has been successfully verified.
+
         </div>
 
     </div>
 
 </main>
+
 
 <script>
 
@@ -334,33 +368,72 @@
         localStorage.getItem("cheapdataUser")
     );
 
-    const amountInput = document.getElementById("amount");
-    const balanceDisplay = document.getElementById("balance");
-    const fundForm = document.getElementById("fundForm");
-    const fundButton = document.getElementById("fundButton");
-    const messageBox = document.getElementById("message");
+    const amountInput =
+        document.getElementById("amount");
 
-    // Redirect if the user is not logged in
+    const balanceDisplay =
+        document.getElementById("balance");
+
+    const fundForm =
+        document.getElementById("fundForm");
+
+    const fundButton =
+        document.getElementById("fundButton");
+
+    const messageBox =
+        document.getElementById("message");
+
+    const loader =
+        document.getElementById("loader");
+
+
+    /*
+     * Require login
+     */
+
     if (!user || !user.id) {
+
         window.location.href = "login.html";
+
     }
+
+
+    /*
+     * Display messages
+     */
 
     function showMessage(text, type) {
+
         messageBox.textContent = text;
-        messageBox.className = `message ${type}`;
+
+        messageBox.className =
+            `message ${type}`;
+
     }
+
+
+    /*
+     * Format Naira
+     */
 
     function formatNaira(amount) {
-        return "₦" + Number(amount || 0).toLocaleString(
-            "en-NG",
-            {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            }
-        );
+
+        return "₦" +
+            Number(amount || 0).toLocaleString(
+                "en-NG",
+                {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }
+            );
+
     }
 
-    // Load current wallet balance
+
+    /*
+     * Load wallet balance
+     */
+
     async function loadBalance() {
 
         try {
@@ -369,9 +442,14 @@
                 `/api/user/${user.id}`
             );
 
-            const data = await response.json();
+            const data =
+                await response.json();
 
-            if (response.ok && data.success) {
+            if (
+                response.ok &&
+                data.success &&
+                data.user
+            ) {
 
                 balanceDisplay.textContent =
                     formatNaira(data.user.balance);
@@ -386,159 +464,367 @@
             );
 
         }
+
     }
 
-    // Quick amount buttons
-    document.querySelectorAll(".quick-btn").forEach(button => {
 
-        button.addEventListener("click", () => {
+    /*
+     * Quick amount buttons
+     */
 
-            amountInput.value =
-                button.dataset.amount;
+    document
+        .querySelectorAll(".quick-btn")
+        .forEach(button => {
 
-        });
+            button.addEventListener(
+                "click",
+                () => {
 
-    });
+                    amountInput.value =
+                        button.dataset.amount;
 
-    // Fund wallet
-    fundForm.addEventListener("submit", async function(event) {
+                    amountInput.focus();
 
-        event.preventDefault();
-
-        const amount = Number(amountInput.value);
-
-        if (!Number.isInteger(amount) || amount < 100) {
-
-            showMessage(
-                "Please enter an amount of at least ₦100.",
-                "error"
-            );
-
-            return;
-        }
-
-        if (amount > 500000) {
-
-            showMessage(
-                "The maximum funding amount is ₦500,000.",
-                "error"
-            );
-
-            return;
-        }
-
-        fundButton.disabled = true;
-        fundButton.textContent = "Preparing Payment...";
-
-        messageBox.className = "message";
-        messageBox.textContent = "";
-
-        try {
-
-            /*
-             * Paystack connection will be added on the server
-             * in the next step.
-             */
-
-            const response = await fetch(
-                "/api/fund-wallet",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        amount: amount
-                    })
                 }
             );
 
-            const data = await response.json();
+        });
 
-            if (!response.ok || !data.success) {
+
+    /*
+     * Start Paystack payment
+     */
+
+    fundForm.addEventListener(
+        "submit",
+        async function(event) {
+
+            event.preventDefault();
+
+            const amount =
+                Number(amountInput.value);
+
+
+            if (
+                !Number.isInteger(amount) ||
+                amount < 100
+            ) {
 
                 showMessage(
-                    data.message ||
-                    "Unable to start payment.",
+                    "Please enter an amount of at least ₦100.",
                     "error"
                 );
 
+                return;
+
+            }
+
+
+            if (amount > 500000) {
+
+                showMessage(
+                    "The maximum funding amount is ₦500,000.",
+                    "error"
+                );
+
+                return;
+
+            }
+
+
+            fundButton.disabled = true;
+
+            fundButton.textContent =
+                "Preparing Payment...";
+
+            messageBox.className =
+                "message";
+
+            messageBox.textContent = "";
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api/fund-wallet",
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body: JSON.stringify({
+                                amount: amount
+                            })
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (
+                    !response.ok ||
+                    !data.success
+                ) {
+
+                    showMessage(
+                        data.message ||
+                        "Unable to start payment.",
+                        "error"
+                    );
+
+                    fundButton.disabled = false;
+
+                    fundButton.textContent =
+                        "Continue to Payment";
+
+                    return;
+
+                }
+
+
+                /*
+                 * Redirect to Paystack
+                 */
+
+                if (data.authorization_url) {
+
+                    window.location.href =
+                        data.authorization_url;
+
+                    return;
+
+                }
+
+
+                showMessage(
+                    "Payment link was not returned by the server.",
+                    "error"
+                );
+
+
                 fundButton.disabled = false;
+
                 fundButton.textContent =
                     "Continue to Payment";
 
-                return;
+
+            } catch (error) {
+
+                console.error(
+                    "Payment initialization error:",
+                    error
+                );
+
+
+                showMessage(
+                    "Unable to connect to the server. Please try again.",
+                    "error"
+                );
+
+
+                fundButton.disabled = false;
+
+                fundButton.textContent =
+                    "Continue to Payment";
+
             }
 
-            // Redirect to Paystack checkout
-            if (data.authorization_url) {
-
-                window.location.href =
-                    data.authorization_url;
-
-                return;
-            }
-
-            showMessage(
-                "Payment link was not returned.",
-                "error"
-            );
-
-            fundButton.disabled = false;
-            fundButton.textContent =
-                "Continue to Payment";
-
-        } catch (error) {
-
-            console.error(error);
-
-            showMessage(
-                "Unable to connect to the server. Please try again.",
-                "error"
-            );
-
-            fundButton.disabled = false;
-            fundButton.textContent =
-                "Continue to Payment";
         }
+    );
 
-    });
+
+    /*
+     * Verify payment when Paystack
+     * redirects the customer back.
+     */
 
     async function verifyReturnedPayment() {
-        const params = new URLSearchParams(window.location.search);
-        const reference = params.get("reference");
 
-        if (!reference) return;
+        const params =
+            new URLSearchParams(
+                window.location.search
+            );
 
-        showMessage("Verifying your payment...", "success");
+        const reference =
+            params.get("reference");
+
+
+        if (!reference) {
+
+            return;
+
+        }
+
+
+        /*
+         * Remove reference from the URL
+         * after reading it.
+         */
+
+        window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname
+        );
+
+
+        fundForm.style.display = "none";
+
+        loader.style.display = "block";
+
+        showMessage(
+            "Payment received. Verifying your payment...",
+            "info"
+        );
+
 
         try {
-            const response = await fetch("/api/fund-wallet/verify", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ reference })
-            });
 
-            const data = await response.json();
+            const response =
+                await fetch(
+                    "/api/fund-wallet/verify",
+                    {
+                        method: "POST",
 
-            if (response.ok && data.success) {
-                balanceDisplay.textContent = formatNaira(data.balance);
-                showMessage(data.message, "success");
-                amountInput.value = "";
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+                            reference: reference
+                        })
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            loader.style.display = "none";
+
+
+            if (
+                response.ok &&
+                data.success
+            ) {
+
+                showMessage(
+                    data.message ||
+                    "Payment verified successfully. Your wallet has been funded.",
+                    "success"
+                );
+
+
+                /*
+                 * Update displayed balance
+                 */
+
+                if (
+                    data.user &&
+                    typeof data.user.balance !==
+                        "undefined"
+                ) {
+
+                    balanceDisplay.textContent =
+                        formatNaira(
+                            data.user.balance
+                        );
+
+                } else {
+
+                    await loadBalance();
+
+                }
+
+
+                /*
+                 * Allow another funding
+                 * after successful payment.
+                 */
+
+                setTimeout(() => {
+
+                    fundForm.style.display =
+                        "block";
+
+                    fundButton.disabled =
+                        false;
+
+                    fundButton.textContent =
+                        "Continue to Payment";
+
+                    amountInput.value = "";
+
+                }, 2500);
+
+
             } else {
-                showMessage(data.message || "Payment verification failed.", "error");
+
+                showMessage(
+                    data.message ||
+                    "Payment could not be verified. Your wallet was not credited.",
+                    "error"
+                );
+
+
+                fundForm.style.display =
+                    "block";
+
+                fundButton.disabled =
+                    false;
+
+                fundButton.textContent =
+                    "Continue to Payment";
+
             }
+
+
         } catch (error) {
-            console.error("Payment verification error:", error);
-            showMessage("Unable to verify payment right now. Please try again.", "error");
-        } finally {
-            window.history.replaceState({}, document.title, window.location.pathname);
+
+            console.error(
+                "Payment verification error:",
+                error
+            );
+
+
+            loader.style.display =
+                "none";
+
+
+            showMessage(
+                "We could not verify the payment right now. Please check your transaction history before trying again.",
+                "error"
+            );
+
+
+            fundForm.style.display =
+                "block";
+
+            fundButton.disabled =
+                false;
+
+            fundButton.textContent =
+                "Continue to Payment";
+
         }
+
     }
 
+
+    /*
+     * Initial page load
+     */
+
     loadBalance();
+
     verifyReturnedPayment();
 
 </script>

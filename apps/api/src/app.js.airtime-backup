@@ -1213,7 +1213,6 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
 app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
     try {
         const userId = req.session.userId;
-
         const {
             network,
             phone,
@@ -1223,20 +1222,15 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
 
         const airtimeAmount = Number(amount);
 
-        // =========================
-        // VALIDATION
-        // =========================
-
         if (
             !network ||
             !phone ||
-            amount === undefined ||
+            !amount ||
             pin === undefined
         ) {
             return res.status(400).json({
                 success: false,
-                message:
-                    "Please provide all purchase details including your Purchase PIN"
+                message: "Please provide all purchase details including your Purchase PIN"
             });
         }
 
@@ -1245,8 +1239,7 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         if (!/^\d{4}$/.test(pinString)) {
             return res.status(400).json({
                 success: false,
-                message:
-                    "Purchase PIN must be exactly 4 digits"
+                message: "Purchase PIN must be exactly 4 digits"
             });
         }
 
@@ -1267,27 +1260,20 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         if (!isValidNigerianPhone(phone)) {
             return res.status(400).json({
                 success: false,
-                message:
-                    "Please enter a valid Nigerian phone number"
+                message: "Please enter a valid Nigerian phone number"
             });
         }
 
         if (
             !Number.isFinite(airtimeAmount) ||
-            !Number.isInteger(airtimeAmount) ||
             airtimeAmount < 50 ||
             airtimeAmount > 50000
         ) {
             return res.status(400).json({
                 success: false,
-                message:
-                    "Airtime amount must be between ₦50 and ₦50,000"
+                message: "Airtime amount must be between ₦50 and ₦50,000"
             });
         }
-
-        // =========================
-        // GET USER
-        // =========================
 
         const user = db.prepare(`
             SELECT
@@ -1308,14 +1294,9 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         if (!user.purchase_pin) {
             return res.status(400).json({
                 success: false,
-                message:
-                    "Please create a Purchase PIN before buying airtime"
+                message: "Please create a Purchase PIN before buying airtime"
             });
         }
-
-        // =========================
-        // CHECK PURCHASE PIN
-        // =========================
 
         const pinCorrect = await bcrypt.compare(
             pinString,
@@ -1329,314 +1310,81 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
             });
         }
 
-        // =========================
-        // CHECK WALLET
-        // =========================
-
-        if (Number(user.balance) < airtimeAmount) {
+        if (user.balance < airtimeAmount) {
             return res.status(400).json({
                 success: false,
                 message: "Insufficient wallet balance"
             });
         }
 
-        // =========================
-        // WISESUB CONFIGURATION
-        // =========================
-
-        const baseUrl =
-            process.env.WISESUB_BASE_URL;
-
-        const apiKey =
-            process.env.WISESUB_API_KEY;
-
-        const apiSecret =
-            process.env.WISESUB_API_SECRET;
-
-        const environment =
-            process.env.WISESUB_ENVIRONMENT || "test";
-
-        if (!baseUrl || !apiKey || !apiSecret) {
-            console.error(
-                "WiseSub configuration is incomplete."
-            );
-
-            return res.status(500).json({
-                success: false,
-                message:
-                    "Airtime service is temporarily unavailable"
-            });
-        }
-
-        // =========================
-        // NETWORK → WISESUB PROVIDER
-        // =========================
-
-        const providerCodes = {
-            MTN: "mtn",
-            Airtel: "airtel",
-            Glo: "glo",
-            "9mobile": "9mobile"
-        };
-
-        const providerCode =
-            providerCodes[network];
-
-        if (!providerCode) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Could not determine the airtime provider"
-            });
-        }
-
-        // =========================
-        // TEST/SANDBOX RECIPIENT
-        // =========================
-        //
-        // WiseSub's sandbox uses its official
-        // test recipient. Live mode uses the
-        // customer's actual phone number.
-        //
-
-        const providerRecipient =
-            environment === "test"
-                ? "08011111111"
-                : phone;
-
-        // =========================
-        // CALL WISESUB
-        // =========================
-
-        const localReference =
+        const reference =
             generateReference("AIRTIME");
 
-        let wiseSubResponse;
+        const transaction =
+            db.transaction(() => {
 
-        try {
-            wiseSubResponse =
-                await axios.post(
-                    `${baseUrl}/purchase`,
-                    {
-                        service_type: "airtime",
-
-                        provider_code:
-                            providerCode,
-
-                        recipient:
-                            providerRecipient,
-
-                        amount:
-                            airtimeAmount
-                    },
-                    {
-                        headers: {
-                            Authorization:
-                                `Bearer ${apiKey}`,
-
-                            "X-API-Secret":
-                                apiSecret,
-
-                            "X-Environment":
-                                environment,
-
-                            Accept:
-                                "application/json",
-
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        timeout: 30000
-                    }
+                const debitResult = db.prepare(`
+                    UPDATE users
+                    SET balance = balance - ?
+                    WHERE id = ?
+                    AND balance >= ?
+                `).run(
+                    airtimeAmount,
+                    userId,
+                    airtimeAmount
                 );
 
-        } catch (providerError) {
+                if (debitResult.changes !== 1) {
+                    throw new Error("Wallet balance changed. Please try again.");
+                }
 
-            console.error(
-                "WiseSub airtime purchase failed."
-            );
-
-            if (providerError.response) {
-                console.error(
-                    "WiseSub status:",
-                    providerError.response.status
-                );
-
-                console.error(
-                    "WiseSub response:",
-                    JSON.stringify(
-                        providerError.response.data,
-                        null,
-                        2
+                db.prepare(`
+                    INSERT INTO transactions (
+                        user_id,
+                        type,
+                        amount,
+                        status,
+                        reference,
+                        description
                     )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `).run(
+                    userId,
+                    "debit",
+                    airtimeAmount,
+                    "successful",
+                    reference,
+                    `${network} airtime purchase for ${phone}`
                 );
-            } else {
-                console.error(
-                    "WiseSub error:",
-                    providerError.message
-                );
-            }
-
-            return res.status(502).json({
-                success: false,
-                message:
-                    "Airtime provider could not process the purchase. Your wallet was not charged."
             });
-        }
 
-        // =========================
-        // CHECK WISESUB RESPONSE
-        // =========================
+        transaction();
 
-        const providerData =
-            wiseSubResponse.data;
+        const updatedUser = db.prepare(`
+            SELECT balance
+            FROM users
+            WHERE id = ?
+        `).get(userId);
 
-        if (
-            !providerData ||
-            providerData.success !== true
-        ) {
-            console.error(
-                "WiseSub returned an unsuccessful airtime response:",
-                JSON.stringify(
-                    providerData,
-                    null,
-                    2
-                )
-            );
-
-            return res.status(502).json({
-                success: false,
-                message:
-                    "Airtime purchase was not completed. Your wallet was not charged."
-            });
-        }
-
-        const wiseSubReference =
-            providerData.data?.reference || null;
-
-        // =========================
-        // DEBIT WALLET + RECORD
-        // =========================
-
-        try {
-            const transaction =
-                db.transaction(() => {
-
-                    const debitResult =
-                        db.prepare(`
-                            UPDATE users
-                            SET balance = balance - ?
-                            WHERE id = ?
-                              AND balance >= ?
-                        `).run(
-                            airtimeAmount,
-                            userId,
-                            airtimeAmount
-                        );
-
-                    if (
-                        debitResult.changes !== 1
-                    ) {
-                        throw new Error(
-                            "Wallet balance changed. Please contact support."
-                        );
-                    }
-
-                    db.prepare(`
-                        INSERT INTO transactions (
-                            user_id,
-                            type,
-                            amount,
-                            status,
-                            reference,
-                            description
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    `).run(
-                        userId,
-                        "debit",
-                        airtimeAmount,
-                        "successful",
-                        localReference,
-                        `${network} airtime purchase for ${phone}` +
-                        (
-                            wiseSubReference
-                                ? ` | WiseSub reference: ${wiseSubReference}`
-                                : ""
-                        )
-                    );
-                });
-
-            transaction();
-
-        } catch (walletError) {
-
-            console.error(
-                "CRITICAL: WiseSub airtime purchase succeeded but CheapData wallet debit failed.",
-                walletError
-            );
-
-            return res.status(500).json({
-                success: false,
-                message:
-                    "Your airtime purchase was processed by the provider, but we could not update your wallet automatically. Please contact support before trying again.",
-                reference:
-                    localReference,
-                providerReference:
-                    wiseSubReference
-            });
-        }
-
-        // =========================
-        // GET UPDATED BALANCE
-        // =========================
-
-        const updatedUser =
-            db.prepare(`
-                SELECT balance
-                FROM users
-                WHERE id = ?
-            `).get(userId);
-
-        // =========================
-        // SUCCESS
-        // =========================
-
-        return res.json({
+        res.json({
             success: true,
-
-            message:
-                "Airtime purchase successful",
-
+            message: "Airtime purchase successful",
             network,
-
             phone,
-
-            amount:
-                airtimeAmount,
-
-            balance:
-                updatedUser.balance,
-
-            reference:
-                localReference,
-
-            providerReference:
-                wiseSubReference
+            amount: airtimeAmount,
+            balance: updatedUser.balance,
+            reference
         });
 
     } catch (error) {
-
         console.error(
             "Airtime purchase error:",
             error
         );
 
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message:
-                "Airtime purchase failed"
+            message: "Airtime purchase failed"
         });
     }
 });

@@ -1,7 +1,30 @@
+const fs = require("fs");
+const path = require("path");
 const Database = require("better-sqlite3");
 const { DB_PATH } = require("./config");
 
-const db = new Database(DB_PATH);
+// Resolve the database path from the CheapData project root.
+const PROJECT_ROOT = path.resolve(__dirname, "../../..");
+
+const configuredDbPath =
+    DB_PATH || "./apps/api/data/cheapdata.db";
+
+const resolvedDbPath = path.isAbsolute(configuredDbPath)
+    ? configuredDbPath
+    : path.resolve(PROJECT_ROOT, configuredDbPath);
+
+// Make sure the database directory exists.
+const dbDirectory = path.dirname(resolvedDbPath);
+
+if (!fs.existsSync(dbDirectory)) {
+    fs.mkdirSync(dbDirectory, { recursive: true });
+    console.log(`Created database directory: ${dbDirectory}`);
+}
+
+console.log(`Using SQLite database: ${resolvedDbPath}`);
+
+const db = new Database(resolvedDbPath);
+
 db.pragma("foreign_keys = ON");
 
 function createTables() {
@@ -22,13 +45,6 @@ function createTables() {
         )
     `).run();
 
-    /*
-     * Data plans are supplied by WiseSub.
-     *
-     * IMPORTANT:
-     * There are NO hard-coded customer data plans here.
-     * WiseSub synchronization is responsible for adding/updating plans.
-     */
     db.prepare(`
         CREATE TABLE IF NOT EXISTS data_plans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,9 +99,6 @@ function addColumnIfMissing(table, column, definition) {
 }
 
 function runMigrations() {
-    /*
-     * User fields.
-     */
     addColumnIfMissing("users", "purchase_pin", "TEXT");
     addColumnIfMissing("users", "virtual_account_number", "TEXT");
     addColumnIfMissing("users", "virtual_bank_name", "TEXT");
@@ -100,26 +113,15 @@ function runMigrations() {
         "INTEGER NOT NULL DEFAULT 0"
     );
     addColumnIfMissing("users", "reset_token_hash", "TEXT");
-    addColumnIfMissing(
-        "users",
-        "reset_token_expires_at",
-        "INTEGER"
-    );
+    addColumnIfMissing("users", "reset_token_expires_at", "INTEGER");
 
-    /*
-     * Data-plan fields required by the current application.
-     */
     addColumnIfMissing("data_plans", "plan", "TEXT");
 
-    /*
-     * Older databases used plan_name.
-     * Copy it into the current plan field when necessary.
-     */
-    if (
-        db.prepare("PRAGMA table_info(data_plans)")
-            .all()
-            .some(column => column.name === "plan_name")
-    ) {
+    const columns = db
+        .prepare("PRAGMA table_info(data_plans)")
+        .all();
+
+    if (columns.some(column => column.name === "plan_name")) {
         db.prepare(`
             UPDATE data_plans
             SET plan = plan_name
@@ -133,7 +135,6 @@ function runMigrations() {
         "active",
         "INTEGER NOT NULL DEFAULT 1"
     );
-
     addColumnIfMissing("data_plans", "provider", "TEXT");
     addColumnIfMissing("data_plans", "provider_code", "TEXT");
     addColumnIfMissing(
@@ -149,23 +150,8 @@ function runMigrations() {
     addColumnIfMissing("data_plans", "data_size", "TEXT");
     addColumnIfMissing("data_plans", "validity", "TEXT");
     addColumnIfMissing("data_plans", "source", "TEXT");
-    addColumnIfMissing(
-        "data_plans",
-        "last_synced_at",
-        "TEXT"
-    );
-
-    /*
-     * SQLite cannot safely add CURRENT_TIMESTAMP as a
-     * non-constant DEFAULT using ALTER TABLE.
-     * Therefore add it as a normal TEXT column and
-     * populate existing records below.
-     */
-    addColumnIfMissing(
-        "data_plans",
-        "updated_at",
-        "TEXT"
-    );
+    addColumnIfMissing("data_plans", "last_synced_at", "TEXT");
+    addColumnIfMissing("data_plans", "updated_at", "TEXT");
 
     db.prepare(`
         UPDATE data_plans
@@ -179,11 +165,6 @@ function runMigrations() {
            OR TRIM(updated_at) = ''
     `).run();
 
-    /*
-     * The old demo plans have no WiseSub source.
-     * Keep them in the database for recovery/history,
-     * but permanently keep them inactive.
-     */
     db.prepare(`
         UPDATE data_plans
         SET active = 0
@@ -191,9 +172,6 @@ function runMigrations() {
            OR TRIM(source) = ''
     `).run();
 
-    /*
-     * WiseSub plans are the active catalog.
-     */
     db.prepare(`
         UPDATE data_plans
         SET active = 1
