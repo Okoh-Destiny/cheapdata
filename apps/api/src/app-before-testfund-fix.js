@@ -1234,22 +1234,11 @@ app.post("/api/purchase-pin/verify", requireAuth, async (req, res) => {
 // =========================
 // TEST FUND
 // DEVELOPMENT ONLY
-// ADMIN ONLY
 // =========================
 
-app.post("/api/test-fund", requireAuth, requireAdmin, (req, res) => {
+app.post("/api/test-fund", requireAuth, (req, res) => {
     try {
-        // Never allow test funding in production.
         if (process.env.NODE_ENV === "production") {
-            return res.status(404).json({
-                success: false,
-                message: "Not found"
-            });
-        }
-
-        // Extra safety switch.
-        // Test funding is disabled unless explicitly enabled.
-        if (process.env.ALLOW_TEST_FUNDING !== "true") {
             return res.status(404).json({
                 success: false,
                 message: "Not found"
@@ -1261,23 +1250,13 @@ app.post("/api/test-fund", requireAuth, requireAdmin, (req, res) => {
 
         const fundAmount = Number(amount);
 
-        // Keep test funding within a reasonable development range.
         if (
             !Number.isFinite(fundAmount) ||
-            fundAmount < 100 ||
-            fundAmount > 500000
+            fundAmount <= 0
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Test funding amount must be between ₦100 and ₦500,000."
-            });
-        }
-
-        // Only allow whole naira amounts.
-        if (!Number.isInteger(fundAmount)) {
-            return res.status(400).json({
-                success: false,
-                message: "Funding amount must be a whole naira amount."
+                message: "Invalid funding details"
             });
         }
 
@@ -1296,42 +1275,40 @@ app.post("/api/test-fund", requireAuth, requireAdmin, (req, res) => {
             });
         }
 
-        const reference = generateReference("TEST");
+        const reference =
+            generateReference("TEST");
 
-        const transaction = db.transaction(() => {
+        const transaction =
+            db.transaction(() => {
 
-            const walletUpdate = db.prepare(`
-                UPDATE users
-                SET balance = balance + ?
-                WHERE id = ?
-            `).run(
-                fundAmount,
-                userId
-            );
+                db.prepare(`
+                    UPDATE users
+                    SET balance = balance + ?
+                    WHERE id = ?
+                `).run(
+                    fundAmount,
+                    userId
+                );
 
-            if (walletUpdate.changes !== 1) {
-                throw new Error("Wallet could not be updated.");
-            }
-
-            db.prepare(`
-                INSERT INTO transactions (
-                    user_id,
-                    type,
-                    amount,
-                    status,
+                db.prepare(`
+                    INSERT INTO transactions (
+                        user_id,
+                        type,
+                        amount,
+                        status,
+                        reference,
+                        description
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `).run(
+                    userId,
+                    "wallet_funding",
+                    fundAmount,
+                    "successful",
                     reference,
-                    description
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-            `).run(
-                userId,
-                "wallet_funding",
-                fundAmount,
-                "successful",
-                reference,
-                "Development admin test wallet funding"
-            );
-        });
+                    "Development test wallet funding"
+                );
+            });
 
         transaction();
 
@@ -1341,20 +1318,22 @@ app.post("/api/test-fund", requireAuth, requireAdmin, (req, res) => {
             WHERE id = ?
         `).get(userId);
 
-        return res.json({
+        res.json({
             success: true,
-            message: "Development test funding successful.",
-            amount: fundAmount,
+            message: "Wallet funded successfully",
             balance: updatedUser.balance,
             reference
         });
 
     } catch (error) {
-        console.error("Test funding error:", error);
+        console.error(
+            "Test fund error:",
+            error
+        );
 
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: "Unable to process test funding."
+            message: "Could not fund wallet"
         });
     }
 });

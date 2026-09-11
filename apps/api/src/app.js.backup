@@ -15,564 +15,23 @@ const app = express();
 
 app.set("trust proxy", 1);
 
-
-// =========================
-// PAYSTACK WEBHOOK
-// =========================
-// Must be registered BEFORE express.json()
-// so we can verify Paystack's original request body.
-
-app.post(
-    "/api/paystack/webhook",
-    express.raw({ type: "application/json" }),
-    (req, res) => {
-        try {
-            const signature = req.headers["x-paystack-signature"];
-
-            if (!signature) {
-                return res.status(401).send("Missing signature");
-            }
-
-            if (!process.env.PAYSTACK_SECRET_KEY) {
-                console.error("PAYSTACK_SECRET_KEY is missing.");
-                return res.status(500).send("Webhook not configured");
-            }
-
-            const expectedSignature = crypto
-                .createHmac(
-                    "sha512",
-                    process.env.PAYSTACK_SECRET_KEY
-                )
-                .update(req.body)
-                .digest("hex");
-
-            const receivedBuffer =
-                Buffer.from(String(signature), "utf8");
-
-            const expectedBuffer =
-                Buffer.from(expectedSignature, "utf8");
-
-            if (
-                receivedBuffer.length !== expectedBuffer.length ||
-                !crypto.timingSafeEqual(
-                    receivedBuffer,
-                    expectedBuffer
-                )
-            ) {
-                console.error("Invalid Paystack webhook signature.");
-                return res.status(401).send("Invalid signature");
-            }
-
-            const event = JSON.parse(
-                req.body.toString("utf8")
-            );
-
-            console.log(
-                "Paystack webhook received:",
-                event.event
-            );
-
-            if (event.event !== "charge.success") {
-                return res.status(200).send("Event received");
-            }
-
-            const payment = event.data;
-
-            if (!payment) {
-                return res.status(400).send("Invalid payment data");
-            }
-
-            const reference =
-                String(payment.reference || "").trim();
-
-            if (!reference) {
-                return res.status(400).send(
-                    "Missing payment reference"
-                );
-            }
-
-            const transaction = db.prepare(`
-                SELECT
-                    id,
-                    user_id,
-                    amount,
-                    status,
-                    reference
-                FROM transactions
-                WHERE reference = ?
-                  AND type = 'wallet_funding'
-                LIMIT 1
-            `).get(reference);
-
-            if (!transaction) {
-                console.warn(
-                    "Paystack webhook transaction not found:",
-                    reference
-                );
-
-                return res.status(200).send(
-                    "Transaction not found"
-                );
-            }
-
-            // Prevent double wallet credit.
-            if (transaction.status === "successful") {
-                console.log(
-                    "Paystack webhook: already processed:",
-                    reference
-                );
-
-                return res.status(200).send(
-                    "Already processed"
-                );
-            }
-
-            const expectedAmount =
-                Math.round(Number(transaction.amount) * 100);
-
-            const paidAmount =
-                Number(payment.amount);
-
-            const currency =
-                String(payment.currency || "").toUpperCase();
-
-            const metadataUserId =
-                String(
-                    payment.metadata &&
-                    payment.metadata.user_id ||
-                    ""
-                );
-
-            if (
-                payment.status !== "success" ||
-                currency !== "NGN" ||
-                paidAmount !== expectedAmount ||
-                metadataUserId !== String(transaction.user_id) ||
-                String(payment.reference) !== reference
-            ) {
-                console.error(
-                    "Paystack webhook payment validation failed:",
-                    {
-                        reference,
-                        paymentStatus: payment.status,
-                        currency,
-                        paidAmount,
-                        expectedAmount,
-                        metadataUserId,
-                        transactionUserId: transaction.user_id
-                    }
-                );
-
-                return res.status(400).send(
-                    "Payment validation failed"
-                );
-            }
-
-            const creditPayment = db.transaction(() => {
-                const current = db.prepare(`
-                    SELECT
-                        status,
-                        user_id,
-                        amount
-                    FROM transactions
-                    WHERE id = ?
-                `).get(transaction.id);
-
-                if (
-                    !current ||
-                    current.status === "successful"
-                ) {
-                    return false;
-                }
-
-                const walletUpdate = db.prepare(`
-                    UPDATE users
-                    SET balance = balance + ?
-                    WHERE id = ?
-                `).run(
-                    current.amount,
-                    current.user_id
-                );
-
-                if (walletUpdate.changes !== 1) {
-                    throw new Error(
-                        "User wallet could not be updated."
-                    );
-                }
-
-                db.prepare(`
-                    UPDATE transactions
-                    SET status = 'successful',
-                        description = ?
-                    WHERE id = ?
-                `).run(
-                    "Paystack webhook wallet funding",
-                    transaction.id
-                );
-
-                return true;
-            });
-
-            const credited = creditPayment();
-
-            console.log(
-                credited
-                    ? `Paystack webhook: ₦${transaction.amount} credited successfully.`
-                    : "Paystack webhook: payment was already processed."
-            );
-
-            return res.status(200).send(
-                "Webhook processed"
-            );
-
-        } catch (error) {
-            console.error(
-                "Paystack webhook error:",
-                error
-            );
-
-            return res.status(500).send(
-                "Webhook processing failed"
-            );
-        }
-    }
-);
-
-// =========================
-// PAYSTACK WEBHOOK
-// =========================
-// IMPORTANT:
-// This must come BEFORE express.json() because Paystack's
-// signature must be calculated from the original raw request body.
-
-app.post(
-    "/api/paystack/webhook",
-    express.raw({ type: "application/json" }),
-    (req, res) => {
-        try {
-            const signature = req.headers["x-paystack-signature"];
-
-            if (!signature) {
-                return res.status(401).send("Missing signature");
-            }
-
-            if (!process.env.PAYSTACK_SECRET_KEY) {
-                console.error(
-                    "PAYSTACK_SECRET_KEY is missing. Webhook rejected."
-                );
-
-                return res.status(500).send("Webhook not configured");
-            }
-
-            // Calculate the HMAC SHA-512 signature from
-            // Paystack's ORIGINAL raw request body.
-            const expectedSignature = crypto
-                .createHmac(
-                    "sha512",
-                    process.env.PAYSTACK_SECRET_KEY
-                )
-                .update(req.body)
-                .digest("hex");
-
-            // Safely compare signatures.
-            const receivedBuffer =
-                Buffer.from(String(signature), "utf8");
-
-            const expectedBuffer =
-                Buffer.from(expectedSignature, "utf8");
-
-            if (
-                receivedBuffer.length !==
-                expectedBuffer.length ||
-                !crypto.timingSafeEqual(
-                    receivedBuffer,
-                    expectedBuffer
-                )
-            ) {
-                console.error(
-                    "Invalid Paystack webhook signature."
-                );
-
-                return res.status(401).send("Invalid signature");
-            }
-
-            const event = JSON.parse(
-                req.body.toString("utf8")
-            );
-
-            console.log(
-                "Paystack webhook received:",
-                event.event
-            );
-
-            // We only need successful wallet payments.
-            if (event.event !== "charge.success") {
-                return res.status(200).send("Event received");
-            }
-
-            const payment = event.data;
-
-            if (!payment) {
-                return res.status(400).send("Invalid payment data");
-            }
-
-            const reference =
-                String(payment.reference || "").trim();
-
-            if (!reference) {
-                return res.status(400).send("Missing payment reference");
-            }
-
-            // Find the CheapData wallet-funding transaction.
-            const transaction = db.prepare(`
-                SELECT
-                    id,
-                    user_id,
-                    amount,
-                    status,
-                    reference
-                FROM transactions
-                WHERE reference = ?
-                  AND type = 'wallet_funding'
-                LIMIT 1
-            `).get(reference);
-
-            // If CheapData does not know this payment,
-            // acknowledge it without crediting anyone.
-            if (!transaction) {
-                console.warn(
-                    "Paystack webhook: transaction not found:",
-                    reference
-                );
-
-                return res.status(200).send("Transaction not found");
-            }
-
-            // Idempotency:
-            // If redirect verification already credited this payment,
-            // NEVER credit it again.
-            if (transaction.status === "successful") {
-                console.log(
-                    "Paystack webhook: payment already credited:",
-                    reference
-                );
-
-                return res.status(200).send("Already processed");
-            }
-
-            const expectedAmount =
-                Math.round(Number(transaction.amount) * 100);
-
-            const paidAmount =
-                Number(payment.amount);
-
-            const currency =
-                String(payment.currency || "").toUpperCase();
-
-            const metadataUserId =
-                String(
-                    payment.metadata &&
-                    payment.metadata.user_id ||
-                    ""
-                );
-
-            // Verify everything before touching the wallet.
-            if (
-                payment.status !== "success" ||
-                currency !== "NGN" ||
-                paidAmount !== expectedAmount ||
-                metadataUserId !== String(transaction.user_id) ||
-                String(payment.reference) !== reference
-            ) {
-                console.error(
-                    "Paystack webhook payment validation failed:",
-                    {
-                        reference,
-                        paymentStatus: payment.status,
-                        currency,
-                        paidAmount,
-                        expectedAmount,
-                        metadataUserId,
-                        transactionUserId:
-                            transaction.user_id
-                    }
-                );
-
-                return res.status(400).send(
-                    "Payment validation failed"
-                );
-            }
-
-            // Credit wallet and mark transaction successful
-            // in ONE database transaction.
-            const creditPayment = db.transaction(() => {
-
-                const current = db.prepare(`
-                    SELECT
-                        status,
-                        user_id,
-                        amount
-                    FROM transactions
-                    WHERE id = ?
-                `).get(transaction.id);
-
-                // Another process may have verified the payment
-                // while this webhook was being handled.
-                if (
-                    !current ||
-                    current.status === "successful"
-                ) {
-                    return false;
-                }
-
-                db.prepare(`
-                    UPDATE users
-                    SET balance = balance + ?
-                    WHERE id = ?
-                `).run(
-                    current.amount,
-                    current.user_id
-                );
-
-                db.prepare(`
-                    UPDATE transactions
-                    SET status = 'successful',
-                        description = ?
-                    WHERE id = ?
-                `).run(
-                    "Paystack webhook wallet funding",
-                    transaction.id
-                );
-
-                return true;
-            });
-
-            const credited =
-                creditPayment();
-
-            console.log(
-                credited
-                    ? `Paystack webhook: ₦${transaction.amount} credited successfully.`
-                    : "Paystack webhook: payment was already processed."
-            );
-
-            // Paystack needs a successful HTTP response.
-            return res.status(200).send("Webhook processed");
-
-        } catch (error) {
-            console.error(
-                "Paystack webhook error:",
-                error
-            );
-
-            return res.status(500).send(
-                "Webhook processing failed"
-            );
-        }
-    }
-);
-
-// Normal JSON parser for the rest of the API.
 app.use(express.json({ limit: "50kb" }));
+app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 
-app.use(express.urlencoded({
-    extended: true,
-    limit: "50kb"
-}));
-// =========================
-// SESSION
-// =========================
-
-app.use(
-    session({
-        secret:
-            process.env.SESSION_SECRET ||
-            "dev-only-insecure-secret",
-
-        resave: false,
-
-        saveUninitialized: false,
-
-        cookie: {
-            httpOnly: true,
-            sameSite: "lax",
-            secure:
-                process.env.NODE_ENV === "production",
-            maxAge:
-                1000 * 60 * 60 * 24
-        }
-    })
-);
-app.use(express.static(WEB_PUBLIC_DIR));
-// =========================
-// SESSION CHECK
-// =========================
-
-app.get("/api/session", (req, res) => {
-    try {
-        if (!req.session || !req.session.userId) {
-            return res.json({
-                success: true,
-                loggedIn: false,
-                user: null,
-                has_purchase_pin: false
-            });
-        }
-
-        const user = db.prepare(`
-            SELECT
-                id,
-                name,
-                email,
-                phone,
-                balance,
-                virtual_account_number,
-                virtual_bank_name,
-                kyc_status,
-                is_admin,
-                purchase_pin,
-                created_at
-            FROM users
-            WHERE id = ?
-        `).get(req.session.userId);
-
-        if (!user) {
-            req.session.destroy(() => {});
-
-            return res.json({
-                success: true,
-                loggedIn: false,
-                user: null,
-                has_purchase_pin: false
-            });
-        }
-
-        const hasPurchasePin = Boolean(
-            user.purchase_pin
-        );
-
-        delete user.purchase_pin;
-
-        return res.json({
-            success: true,
-            loggedIn: true,
-            user: user,
-            has_purchase_pin: hasPurchasePin
-        });
-
-    } catch (error) {
-        console.error(
-            "Session check error:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-            loggedIn: false,
-            message: "Could not check session"
-        });
+app.use(session({
+    secret: process.env.SESSION_SECRET || "dev-only-insecure-secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 1000 * 60 * 60 * 24 // 24 hours
     }
-});
+}));
+
+app.use(express.static(WEB_PUBLIC_DIR));
+
 // =========================
 // HELPER FUNCTIONS
 // =========================
@@ -624,10 +83,6 @@ app.post("/api/register", async (req, res) => {
             password
         } = req.body;
 
-        // =========================
-        // VALIDATION
-        // =========================
-
         if (!name || !email || !phone || !password) {
             return res.status(400).json({
                 success: false,
@@ -649,15 +104,11 @@ app.post("/api/register", async (req, res) => {
             });
         }
 
-        // =========================
-        // CHECK EXISTING USER
-        // =========================
-
         const existingUser = db.prepare(`
             SELECT id
             FROM users
             WHERE email = ?
-               OR phone = ?
+            OR phone = ?
         `).get(email, phone);
 
         if (existingUser) {
@@ -667,18 +118,10 @@ app.post("/api/register", async (req, res) => {
             });
         }
 
-        // =========================
-        // HASH PASSWORD
-        // =========================
-
         const hashedPassword = await bcrypt.hash(
             password,
             10
         );
-
-        // =========================
-        // CREATE USER
-        // =========================
 
         const result = db.prepare(`
             INSERT INTO users (
@@ -699,10 +142,6 @@ app.post("/api/register", async (req, res) => {
             hashedPassword
         );
 
-        // =========================
-        // GET NEW USER
-        // =========================
-
         const user = db.prepare(`
             SELECT
                 id,
@@ -720,50 +159,19 @@ app.post("/api/register", async (req, res) => {
             WHERE id = ?
         `).get(result.lastInsertRowid);
 
-        if (!user) {
-            return res.status(500).json({
-                success: false,
-                message: "Account was created but could not be loaded"
-            });
-        }
-
         const hasPurchasePin = Boolean(
             user.purchase_pin
         );
 
         delete user.purchase_pin;
 
-        // =========================
-        // CREATE LOGIN SESSION
-        // =========================
-
-        req.session.regenerate((err) => {
-            if (err) {
-                console.error(
-                    "Registration session error:",
-                    err
-                );
-
-                return res.status(500).json({
-                    success: false,
-                    message: "Account created but automatic login failed"
-                });
+        res.json({
+            success: true,
+            message: "Account created successfully",
+            user: {
+                ...user,
+                has_purchase_pin: hasPurchasePin
             }
-
-            req.session.userId = user.id;
-
-            // =========================
-            // RESPONSE
-            // =========================
-
-            return res.json({
-                success: true,
-                message: "Account created successfully",
-                user: {
-                    ...user,
-                    has_purchase_pin: hasPurchasePin
-                }
-            });
         });
 
     } catch (error) {
@@ -772,7 +180,7 @@ app.post("/api/register", async (req, res) => {
             error
         );
 
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             message: "Registration failed"
         });
@@ -1234,22 +642,11 @@ app.post("/api/purchase-pin/verify", requireAuth, async (req, res) => {
 // =========================
 // TEST FUND
 // DEVELOPMENT ONLY
-// ADMIN ONLY
 // =========================
 
-app.post("/api/test-fund", requireAuth, requireAdmin, (req, res) => {
+app.post("/api/test-fund", requireAuth, (req, res) => {
     try {
-        // Never allow test funding in production.
         if (process.env.NODE_ENV === "production") {
-            return res.status(404).json({
-                success: false,
-                message: "Not found"
-            });
-        }
-
-        // Extra safety switch.
-        // Test funding is disabled unless explicitly enabled.
-        if (process.env.ALLOW_TEST_FUNDING !== "true") {
             return res.status(404).json({
                 success: false,
                 message: "Not found"
@@ -1261,23 +658,13 @@ app.post("/api/test-fund", requireAuth, requireAdmin, (req, res) => {
 
         const fundAmount = Number(amount);
 
-        // Keep test funding within a reasonable development range.
         if (
             !Number.isFinite(fundAmount) ||
-            fundAmount < 100 ||
-            fundAmount > 500000
+            fundAmount <= 0
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Test funding amount must be between ₦100 and ₦500,000."
-            });
-        }
-
-        // Only allow whole naira amounts.
-        if (!Number.isInteger(fundAmount)) {
-            return res.status(400).json({
-                success: false,
-                message: "Funding amount must be a whole naira amount."
+                message: "Invalid funding details"
             });
         }
 
@@ -1296,42 +683,40 @@ app.post("/api/test-fund", requireAuth, requireAdmin, (req, res) => {
             });
         }
 
-        const reference = generateReference("TEST");
+        const reference =
+            generateReference("TEST");
 
-        const transaction = db.transaction(() => {
+        const transaction =
+            db.transaction(() => {
 
-            const walletUpdate = db.prepare(`
-                UPDATE users
-                SET balance = balance + ?
-                WHERE id = ?
-            `).run(
-                fundAmount,
-                userId
-            );
+                db.prepare(`
+                    UPDATE users
+                    SET balance = balance + ?
+                    WHERE id = ?
+                `).run(
+                    fundAmount,
+                    userId
+                );
 
-            if (walletUpdate.changes !== 1) {
-                throw new Error("Wallet could not be updated.");
-            }
-
-            db.prepare(`
-                INSERT INTO transactions (
-                    user_id,
-                    type,
-                    amount,
-                    status,
+                db.prepare(`
+                    INSERT INTO transactions (
+                        user_id,
+                        type,
+                        amount,
+                        status,
+                        reference,
+                        description
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `).run(
+                    userId,
+                    "wallet_funding",
+                    fundAmount,
+                    "successful",
                     reference,
-                    description
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-            `).run(
-                userId,
-                "wallet_funding",
-                fundAmount,
-                "successful",
-                reference,
-                "Development admin test wallet funding"
-            );
-        });
+                    "Development test wallet funding"
+                );
+            });
 
         transaction();
 
@@ -1341,20 +726,22 @@ app.post("/api/test-fund", requireAuth, requireAdmin, (req, res) => {
             WHERE id = ?
         `).get(userId);
 
-        return res.json({
+        res.json({
             success: true,
-            message: "Development test funding successful.",
-            amount: fundAmount,
+            message: "Wallet funded successfully",
             balance: updatedUser.balance,
             reference
         });
 
     } catch (error) {
-        console.error("Test funding error:", error);
+        console.error(
+            "Test fund error:",
+            error
+        );
 
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: "Unable to process test funding."
+            message: "Could not fund wallet"
         });
     }
 });
@@ -2318,12 +1705,13 @@ app.get("/api/data-plans", (req, res) => {
                 validity
             FROM data_plans
             WHERE active = 1
-              AND LOWER(TRIM(source)) = 'wisesub'
+              AND source IS NOT NULL
+              AND TRIM(source) <> ''
             ORDER BY
-                CASE LOWER(network)
-                    WHEN 'mtn' THEN 1
-                    WHEN 'airtel' THEN 2
-                    WHEN 'glo' THEN 3
+                CASE network
+                    WHEN 'MTN' THEN 1
+                    WHEN 'Airtel' THEN 2
+                    WHEN 'Glo' THEN 3
                     WHEN '9mobile' THEN 4
                     ELSE 5
                 END,
@@ -2335,7 +1723,6 @@ app.get("/api/data-plans", (req, res) => {
             success: true,
             plans
         });
-
     } catch (error) {
         console.error("Data plans error:", error);
 

@@ -379,7 +379,11 @@
                     return;
                 }
 
-                if (!data.userId) {
+                /*
+                    Save the new user's ID temporarily.
+                    The Create PIN page will use this ID.
+                */
+                if (!data.user || !data.user.id) {
                     showMessage(
                         "Account was created, but no user ID was returned.",
                         "error"
@@ -390,13 +394,9 @@
                     return;
                 }
 
-                /*
-                    Save the new user's ID temporarily.
-                    The Create PIN page will use this ID.
-                */
                 localStorage.setItem(
                     "cheapdataNewUserId",
-                    String(data.userId)
+                    String(data.user.id)
                 );
 
                 showMessage(

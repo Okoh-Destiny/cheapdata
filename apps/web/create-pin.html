@@ -2,8 +2,12 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
 
     <title>Create Purchase PIN | CheapData</title>
 
@@ -67,8 +71,8 @@
             background: #eef8f2;
 
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
 
             font-size: 32px;
         }
@@ -76,7 +80,9 @@
         h1 {
             text-align: center;
 
-            margin-bottom: 10px;
+            font-size: 27px;
+
+            margin-bottom: 12px;
         }
 
         .subtitle {
@@ -84,13 +90,29 @@
 
             color: #667085;
 
-            line-height: 1.5;
+            line-height: 1.6;
 
-            margin-bottom: 30px;
+            margin-bottom: 25px;
+        }
+
+        .message {
+            display: none;
+
+            padding: 12px 15px;
+
+            border-radius: 9px;
+
+            margin-bottom: 20px;
+
+            text-align: center;
+
+            font-size: 14px;
+
+            line-height: 1.5;
         }
 
         .form-group {
-            margin-bottom: 18px;
+            margin-bottom: 20px;
         }
 
         label {
@@ -104,11 +126,11 @@
         input {
             width: 100%;
 
-            padding: 15px;
+            padding: 14px;
 
             border: 1px solid #d0d5dd;
 
-            border-radius: 8px;
+            border-radius: 9px;
 
             font-size: 20px;
 
@@ -121,42 +143,43 @@
 
         input:focus {
             border-color: #176b3a;
+
+            box-shadow:
+                0 0 0 3px rgba(23, 107, 58, 0.1);
         }
 
         .hint {
-            font-size: 13px;
-
             color: #667085;
 
-            margin-top: 7px;
+            font-size: 13px;
 
-            text-align: center;
+            margin-top: 7px;
         }
 
         .create-btn {
             width: 100%;
 
-            padding: 15px;
-
             border: none;
-
-            border-radius: 8px;
 
             background: #176b3a;
 
             color: white;
 
-            font-size: 17px;
+            padding: 14px;
+
+            border-radius: 9px;
+
+            font-size: 16px;
 
             font-weight: bold;
 
             cursor: pointer;
 
-            margin-top: 5px;
+            transition: 0.2s;
         }
 
         .create-btn:hover {
-            background: #12562e;
+            background: #12582f;
         }
 
         .create-btn:disabled {
@@ -165,40 +188,40 @@
             cursor: not-allowed;
         }
 
-        .message {
-            display: none;
+        .security {
+            margin-top: 22px;
 
             padding: 12px;
 
-            border-radius: 8px;
+            background: #f5f7fb;
 
-            margin-bottom: 18px;
-
-            text-align: center;
-
-            line-height: 1.4;
-        }
-
-        .security {
-            margin-top: 25px;
-
-            padding: 14px;
-
-            background: #f8fafc;
-
-            border-radius: 10px;
+            border-radius: 9px;
 
             color: #667085;
 
             font-size: 13px;
 
-            line-height: 1.5;
-
             text-align: center;
+
+            line-height: 1.5;
         }
 
         .back-login {
             display: block;
+
+            text-align: center;
+
+            margin-top: 20px;
+
+            color: #176b3a;
+
+            text-decoration: none;
+
+            font-weight: bold;
+        }
+
+        .back-dashboard {
+            display: none;
 
             text-align: center;
 
@@ -218,7 +241,9 @@
 
 <body>
 
+
 <div class="container">
+
 
     <div class="logo">
         CheapData
@@ -226,6 +251,7 @@
 
 
     <div class="card">
+
 
         <div class="icon">
             🔐
@@ -250,6 +276,7 @@
 
 
         <form id="pinForm">
+
 
             <div class="form-group">
 
@@ -302,31 +329,46 @@
 
             </button>
 
+
         </form>
 
 
         <div class="security">
 
-            🔒 Your PIN is securely stored and is not
-            displayed as plain text.
+            🔒 Your PIN is securely stored securely and is
+            never displayed as plain text.
 
         </div>
+
 
     </div>
 
 
     <a
         href="/login.html"
-        class="back-login">
+        class="back-login"
+        id="backLogin">
 
         Already have an account? Login
 
     </a>
 
+
+    <a
+        href="/dashboard.html"
+        class="back-dashboard"
+        id="backDashboard">
+
+        ← Back to Dashboard
+
+    </a>
+
+
 </div>
 
 
 <script>
+
 
 const form =
     document.getElementById("pinForm");
@@ -343,27 +385,99 @@ const button =
 const message =
     document.getElementById("message");
 
+const backLogin =
+    document.getElementById("backLogin");
 
-// ======================================
-// GET NEW USER ID
-// ======================================
-
-const userId =
-    localStorage.getItem("cheapdataNewUserId");
+const backDashboard =
+    document.getElementById("backDashboard");
 
 
 // ======================================
-// CHECK USER ID
+// CHECK LOGIN SESSION
 // ======================================
 
-if (!userId) {
+async function checkSession() {
 
-    showMessage(
-        "We could not find your new account. Please register again.",
-        "error"
-    );
+    try {
 
-    button.disabled = true;
+        const response =
+            await fetch(
+                "/api/session",
+                {
+                    credentials: "include"
+                }
+            );
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok ||
+            !data.loggedIn
+        ) {
+
+            showMessage(
+                "Please log in to continue.",
+                "error"
+            );
+
+            form.style.display = "none";
+
+            backLogin.style.display = "block";
+
+            return false;
+        }
+
+
+        // ==================================
+        // CHECK WHETHER PIN ALREADY EXISTS
+        // ==================================
+
+        if (data.has_purchase_pin) {
+
+            showMessage(
+                "Your Purchase PIN has already been created.",
+                "success"
+            );
+
+            form.style.display = "none";
+
+            backDashboard.style.display = "block";
+
+            return false;
+        }
+
+
+        // Logged in and no PIN yet.
+
+        form.style.display = "block";
+
+        backLogin.style.display = "none";
+
+        backDashboard.style.display = "none";
+
+        return true;
+
+
+    } catch (error) {
+
+        console.error(
+            "Session check error:",
+            error
+        );
+
+        showMessage(
+            "Unable to check your login session. Please try again.",
+            "error"
+        );
+
+        form.style.display = "none";
+
+        backLogin.style.display = "block";
+
+        return false;
+    }
 
 }
 
@@ -406,26 +520,10 @@ form.addEventListener(
 
 
         const pin =
-            pinInput.value;
+            pinInput.value.trim();
 
         const confirmPin =
-            confirmPinInput.value;
-
-
-        // ==================================
-        // CHECK USER ID
-        // ==================================
-
-        if (!userId) {
-
-            showMessage(
-                "Your account information could not be found. Please register again.",
-                "error"
-            );
-
-            return;
-
-        }
+            confirmPinInput.value.trim();
 
 
         // ==================================
@@ -435,18 +533,13 @@ form.addEventListener(
         if (!/^\d{4}$/.test(pin)) {
 
             showMessage(
-                "Your Purchase PIN must be exactly 4 digits.",
+                "Purchase PIN must be exactly 4 digits.",
                 "error"
             );
 
             return;
-
         }
 
-
-        // ==================================
-        // CONFIRM PIN
-        // ==================================
 
         if (pin !== confirmPin) {
 
@@ -456,13 +549,8 @@ form.addEventListener(
             );
 
             return;
-
         }
 
-
-        // ==================================
-        // DISABLE BUTTON
-        // ==================================
 
         button.disabled = true;
 
@@ -472,15 +560,13 @@ form.addEventListener(
 
         try {
 
-            // ==============================
-            // SEND TO SERVER
-            // ==============================
-
             const response =
                 await fetch(
                     "/api/purchase-pin/set",
                     {
                         method: "POST",
+
+                        credentials: "include",
 
                         headers: {
                             "Content-Type":
@@ -488,13 +574,7 @@ form.addEventListener(
                         },
 
                         body: JSON.stringify({
-
-                            userId:
-                                Number(userId),
-
-                            purchasePin:
-                                pin
-
+                            pin: pin
                         })
                     }
                 );
@@ -504,9 +584,9 @@ form.addEventListener(
                 await response.json();
 
 
-            // ==============================
+            // ==================================
             // HANDLE ERROR
-            // ==============================
+            // ==================================
 
             if (
                 !response.ok ||
@@ -525,13 +605,12 @@ form.addEventListener(
                     "Create Purchase PIN";
 
                 return;
-
             }
 
 
-            // ==============================
+            // ==================================
             // SUCCESS
-            // ==============================
+            // ==================================
 
             showMessage(
                 "Purchase PIN created successfully! 🎉",
@@ -543,25 +622,19 @@ form.addEventListener(
                 "PIN Created ✓";
 
 
-            /*
-                The temporary user ID is no
-                longer needed after PIN creation.
-            */
+            // Remove the old temporary ID
+            // if it still exists from the old system.
 
             localStorage.removeItem(
                 "cheapdataNewUserId"
             );
 
 
-            // ==============================
-            // GO TO LOGIN
-            // ==============================
-
             setTimeout(
                 function() {
 
                     window.location.href =
-                        "/login.html";
+                        "/dashboard.html";
 
                 },
                 1200
@@ -626,7 +699,16 @@ function showMessage(text, type) {
 
 }
 
+
+// ======================================
+// START
+// ======================================
+
+checkSession();
+
+
 </script>
+
 
 </body>
 
