@@ -1,9 +1,6 @@
 const express = require("express");
-const helmet = require("helmet");
-const { rateLimit } = require("express-rate-limit");
 const axios = require("axios");
 const session = require("express-session");
-const SQLiteSessionStore = require("./sqlite-session-store");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { WEB_PUBLIC_DIR } = require("./config");
@@ -17,60 +14,6 @@ const app = express();
 // =========================
 
 app.set("trust proxy", 1);
-// =========================
-// RATE LIMITING
-// =========================
-
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many login attempts. Please try again later."
-  }
-});
-
-const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many registration attempts. Please try again later."
-  }
-});
-
-const forgotPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many password reset requests. Please try again later."
-  }
-});
-
-const resetPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many password reset attempts. Please try again later."
-  }
-});
-// Security headers.
-// CSP is intentionally not enabled yet because the frontend currently
-// uses inline <script> and <style> blocks.
-app.use(helmet({
-  contentSecurityPolicy: false
-}));
-
 
 
 // =========================
@@ -300,6 +243,236 @@ app.post(
 // =========================
 // IMPORTANT:
 // This must come BEFORE express.json() because Paystack's
+// signature must be calculated from the original raw request body.
+
+app.post(
+    "/api/paystack/webhook",
+    express.raw({ type: "application/json" }),
+    (req, res) => {
+        try {
+            const signature = req.headers["x-paystack-signature"];
+
+            if (!signature) {
+                return res.status(401).send("Missing signature");
+            }
+
+            if (!process.env.PAYSTACK_SECRET_KEY) {
+                console.error(
+                    "PAYSTACK_SECRET_KEY is missing. Webhook rejected."
+                );
+
+                return res.status(500).send("Webhook not configured");
+            }
+
+            // Calculate the HMAC SHA-512 signature from
+            // Paystack's ORIGINAL raw request body.
+            const expectedSignature = crypto
+                .createHmac(
+                    "sha512",
+                    process.env.PAYSTACK_SECRET_KEY
+                )
+                .update(req.body)
+                .digest("hex");
+
+            // Safely compare signatures.
+            const receivedBuffer =
+                Buffer.from(String(signature), "utf8");
+
+            const expectedBuffer =
+                Buffer.from(expectedSignature, "utf8");
+
+            if (
+                receivedBuffer.length !==
+                expectedBuffer.length ||
+                !crypto.timingSafeEqual(
+                    receivedBuffer,
+                    expectedBuffer
+                )
+            ) {
+                console.error(
+                    "Invalid Paystack webhook signature."
+                );
+
+                return res.status(401).send("Invalid signature");
+            }
+
+            const event = JSON.parse(
+                req.body.toString("utf8")
+            );
+
+            console.log(
+                "Paystack webhook received:",
+                event.event
+            );
+
+            // We only need successful wallet payments.
+            if (event.event !== "charge.success") {
+                return res.status(200).send("Event received");
+            }
+
+            const payment = event.data;
+
+            if (!payment) {
+                return res.status(400).send("Invalid payment data");
+            }
+
+            const reference =
+                String(payment.reference || "").trim();
+
+            if (!reference) {
+                return res.status(400).send("Missing payment reference");
+            }
+
+            // Find the CheapData wallet-funding transaction.
+            const transaction = db.prepare(`
+                SELECT
+                    id,
+                    user_id,
+                    amount,
+                    status,
+                    reference
+                FROM transactions
+                WHERE reference = ?
+                  AND type = 'wallet_funding'
+                LIMIT 1
+            `).get(reference);
+
+            // If CheapData does not know this payment,
+            // acknowledge it without crediting anyone.
+            if (!transaction) {
+                console.warn(
+                    "Paystack webhook: transaction not found:",
+                    reference
+                );
+
+                return res.status(200).send("Transaction not found");
+            }
+
+            // Idempotency:
+            // If redirect verification already credited this payment,
+            // NEVER credit it again.
+            if (transaction.status === "successful") {
+                console.log(
+                    "Paystack webhook: payment already credited:",
+                    reference
+                );
+
+                return res.status(200).send("Already processed");
+            }
+
+            const expectedAmount =
+                Math.round(Number(transaction.amount) * 100);
+
+            const paidAmount =
+                Number(payment.amount);
+
+            const currency =
+                String(payment.currency || "").toUpperCase();
+
+            const metadataUserId =
+                String(
+                    payment.metadata &&
+                    payment.metadata.user_id ||
+                    ""
+                );
+
+            // Verify everything before touching the wallet.
+            if (
+                payment.status !== "success" ||
+                currency !== "NGN" ||
+                paidAmount !== expectedAmount ||
+                metadataUserId !== String(transaction.user_id) ||
+                String(payment.reference) !== reference
+            ) {
+                console.error(
+                    "Paystack webhook payment validation failed:",
+                    {
+                        reference,
+                        paymentStatus: payment.status,
+                        currency,
+                        paidAmount,
+                        expectedAmount,
+                        metadataUserId,
+                        transactionUserId:
+                            transaction.user_id
+                    }
+                );
+
+                return res.status(400).send(
+                    "Payment validation failed"
+                );
+            }
+
+            // Credit wallet and mark transaction successful
+            // in ONE database transaction.
+            const creditPayment = db.transaction(() => {
+
+                const current = db.prepare(`
+                    SELECT
+                        status,
+                        user_id,
+                        amount
+                    FROM transactions
+                    WHERE id = ?
+                `).get(transaction.id);
+
+                // Another process may have verified the payment
+                // while this webhook was being handled.
+                if (
+                    !current ||
+                    current.status === "successful"
+                ) {
+                    return false;
+                }
+
+                db.prepare(`
+                    UPDATE users
+                    SET balance = balance + ?
+                    WHERE id = ?
+                `).run(
+                    current.amount,
+                    current.user_id
+                );
+
+                db.prepare(`
+                    UPDATE transactions
+                    SET status = 'successful',
+                        description = ?
+                    WHERE id = ?
+                `).run(
+                    "Paystack webhook wallet funding",
+                    transaction.id
+                );
+
+                return true;
+            });
+
+            const credited =
+                creditPayment();
+
+            console.log(
+                credited
+                    ? `Paystack webhook: ₦${transaction.amount} credited successfully.`
+                    : "Paystack webhook: payment was already processed."
+            );
+
+            // Paystack needs a successful HTTP response.
+            return res.status(200).send("Webhook processed");
+
+        } catch (error) {
+            console.error(
+                "Paystack webhook error:",
+                error
+            );
+
+            return res.status(500).send(
+                "Webhook processing failed"
+            );
+        }
+    }
+);
+
+// Normal JSON parser for the rest of the API.
 app.use(express.json({ limit: "50kb" }));
 
 app.use(express.urlencoded({
@@ -310,12 +483,8 @@ app.use(express.urlencoded({
 // SESSION
 // =========================
 
-const sessionStore = new SQLiteSessionStore();
-
 app.use(
     session({
-        store: sessionStore,
-
         secret:
             process.env.SESSION_SECRET ||
             "dev-only-insecure-secret",
@@ -446,7 +615,7 @@ app.get("/api/status", (req, res) => {
 // REGISTER
 // =========================
 
-app.post("/api/register", registerLimiter, async (req, res) => {
+app.post("/api/register", async (req, res) => {
     try {
         const {
             name,
@@ -473,10 +642,10 @@ app.post("/api/register", registerLimiter, async (req, res) => {
             });
         }
 
-        if (password.length < 8) {
+        if (password.length < 6) {
             return res.status(400).json({
                 success: false,
-                message: "Password must be at least 8 characters"
+                message: "Password must be at least 6 characters"
             });
         }
 
@@ -614,7 +783,7 @@ app.post("/api/register", registerLimiter, async (req, res) => {
 // LOGIN
 // =========================
 
-app.post("/api/login", loginLimiter, async (req, res) => {
+app.post("/api/login", async (req, res) => {
     try {
         const {
             email,
@@ -2476,7 +2645,7 @@ app.get("/api/admin/transactions", requireAuth, requireAdmin, (req, res) => {
 // FORGOT PASSWORD
 // =========================
 
-app.post("/api/forgot-password", forgotPasswordLimiter, (req, res) => {
+app.post("/api/forgot-password", (req, res) => {
     try {
         const email = String(req.body.email || "").trim().toLowerCase();
 
@@ -2526,25 +2695,20 @@ app.post("/api/forgot-password", forgotPasswordLimiter, (req, res) => {
             user.id
         );
 
+        // DEVELOPMENT ONLY:
+        // This prints the reset link in the terminal.
         const resetUrl =
-    `${process.env.CHEAPDATA_PUBLIC_URL || `${req.protocol}://${req.get("host")}`}/reset-password.html?token=${resetToken}`;
+            `http://localhost:3000/reset-password.html?token=${resetToken}`;
 
-if (process.env.NODE_ENV !== "production") {
-    console.log("");
-    console.log("======================================");
-    console.log("PASSWORD RESET REQUEST");
-    console.log("======================================");
-    console.log(`Email: ${user.email}`);
-    console.log(`Reset link: ${resetUrl}`);
-    console.log("Expires in: 15 minutes");
-    console.log("======================================");
-    console.log("");
-} else {
-    console.log(
-        `Password reset requested for ${user.email}. ` +
-        "Reset token delivery is not configured."
-    );
-}
+        console.log("");
+        console.log("======================================");
+        console.log("PASSWORD RESET REQUEST");
+        console.log("======================================");
+        console.log(`Email: ${user.email}`);
+        console.log(`Reset link: ${resetUrl}`);
+        console.log("Expires in: 15 minutes");
+        console.log("======================================");
+        console.log("");
 
         return res.json({
             success: true,
@@ -2565,7 +2729,7 @@ if (process.env.NODE_ENV !== "production") {
 // RESET PASSWORD
 // =========================
 
-app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
+app.post("/api/reset-password", async (req, res) => {
     try {
         const { token, newPassword } = req.body;
 
@@ -2576,10 +2740,10 @@ app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
             });
         }
 
-        if (newPassword.length < 8) {
+        if (newPassword.length < 6) {
             return res.status(400).json({
                 success: false,
-                message: "Password must be at least 8 characters."
+                message: "Password must be at least 6 characters."
             });
         }
 
@@ -2618,7 +2782,7 @@ app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
         // Save the new password and invalidate the reset token
-                db.prepare(`
+        db.prepare(`
             UPDATE users
             SET password = ?,
                 reset_token_hash = NULL,
@@ -2628,16 +2792,6 @@ app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
             hashedPassword,
             user.id
         );
-
-        await new Promise((resolve, reject) => {
-            sessionStore.destroyUserSessions(user.id, (error) => {
-                if (error) {
-                    return reject(error);
-                }
-
-                resolve();
-            });
-        });
 
         return res.json({
             success: true,
@@ -2898,15 +3052,11 @@ app.post("/api/fund-wallet/verify", requireAuth, async (req, res) => {
                 return false;
             }
 
-            const walletUpdate = db.prepare(`
+            db.prepare(`
                 UPDATE users
                 SET balance = balance + ?
                 WHERE id = ?
             `).run(current.amount, current.user_id);
-
-            if (walletUpdate.changes !== 1) {
-                throw new Error("Wallet could not be updated.");
-            }
 
             db.prepare(`
                 UPDATE transactions

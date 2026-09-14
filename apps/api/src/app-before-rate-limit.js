@@ -1,9 +1,7 @@
 const express = require("express");
 const helmet = require("helmet");
-const { rateLimit } = require("express-rate-limit");
 const axios = require("axios");
 const session = require("express-session");
-const SQLiteSessionStore = require("./sqlite-session-store");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { WEB_PUBLIC_DIR } = require("./config");
@@ -17,53 +15,7 @@ const app = express();
 // =========================
 
 app.set("trust proxy", 1);
-// =========================
-// RATE LIMITING
-// =========================
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many login attempts. Please try again later."
-  }
-});
-
-const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many registration attempts. Please try again later."
-  }
-});
-
-const forgotPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many password reset requests. Please try again later."
-  }
-});
-
-const resetPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many password reset attempts. Please try again later."
-  }
-});
 // Security headers.
 // CSP is intentionally not enabled yet because the frontend currently
 // uses inline <script> and <style> blocks.
@@ -310,12 +262,8 @@ app.use(express.urlencoded({
 // SESSION
 // =========================
 
-const sessionStore = new SQLiteSessionStore();
-
 app.use(
     session({
-        store: sessionStore,
-
         secret:
             process.env.SESSION_SECRET ||
             "dev-only-insecure-secret",
@@ -446,7 +394,7 @@ app.get("/api/status", (req, res) => {
 // REGISTER
 // =========================
 
-app.post("/api/register", registerLimiter, async (req, res) => {
+app.post("/api/register", async (req, res) => {
     try {
         const {
             name,
@@ -473,10 +421,10 @@ app.post("/api/register", registerLimiter, async (req, res) => {
             });
         }
 
-        if (password.length < 8) {
+        if (password.length < 6) {
             return res.status(400).json({
                 success: false,
-                message: "Password must be at least 8 characters"
+                message: "Password must be at least 6 characters"
             });
         }
 
@@ -614,7 +562,7 @@ app.post("/api/register", registerLimiter, async (req, res) => {
 // LOGIN
 // =========================
 
-app.post("/api/login", loginLimiter, async (req, res) => {
+app.post("/api/login", async (req, res) => {
     try {
         const {
             email,
@@ -2476,7 +2424,7 @@ app.get("/api/admin/transactions", requireAuth, requireAdmin, (req, res) => {
 // FORGOT PASSWORD
 // =========================
 
-app.post("/api/forgot-password", forgotPasswordLimiter, (req, res) => {
+app.post("/api/forgot-password", (req, res) => {
     try {
         const email = String(req.body.email || "").trim().toLowerCase();
 
@@ -2526,25 +2474,20 @@ app.post("/api/forgot-password", forgotPasswordLimiter, (req, res) => {
             user.id
         );
 
+        // DEVELOPMENT ONLY:
+        // This prints the reset link in the terminal.
         const resetUrl =
-    `${process.env.CHEAPDATA_PUBLIC_URL || `${req.protocol}://${req.get("host")}`}/reset-password.html?token=${resetToken}`;
+            `http://localhost:3000/reset-password.html?token=${resetToken}`;
 
-if (process.env.NODE_ENV !== "production") {
-    console.log("");
-    console.log("======================================");
-    console.log("PASSWORD RESET REQUEST");
-    console.log("======================================");
-    console.log(`Email: ${user.email}`);
-    console.log(`Reset link: ${resetUrl}`);
-    console.log("Expires in: 15 minutes");
-    console.log("======================================");
-    console.log("");
-} else {
-    console.log(
-        `Password reset requested for ${user.email}. ` +
-        "Reset token delivery is not configured."
-    );
-}
+        console.log("");
+        console.log("======================================");
+        console.log("PASSWORD RESET REQUEST");
+        console.log("======================================");
+        console.log(`Email: ${user.email}`);
+        console.log(`Reset link: ${resetUrl}`);
+        console.log("Expires in: 15 minutes");
+        console.log("======================================");
+        console.log("");
 
         return res.json({
             success: true,
@@ -2565,7 +2508,7 @@ if (process.env.NODE_ENV !== "production") {
 // RESET PASSWORD
 // =========================
 
-app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
+app.post("/api/reset-password", async (req, res) => {
     try {
         const { token, newPassword } = req.body;
 
@@ -2576,10 +2519,10 @@ app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
             });
         }
 
-        if (newPassword.length < 8) {
+        if (newPassword.length < 6) {
             return res.status(400).json({
                 success: false,
-                message: "Password must be at least 8 characters."
+                message: "Password must be at least 6 characters."
             });
         }
 
@@ -2618,7 +2561,7 @@ app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
         // Save the new password and invalidate the reset token
-                db.prepare(`
+        db.prepare(`
             UPDATE users
             SET password = ?,
                 reset_token_hash = NULL,
@@ -2628,16 +2571,6 @@ app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
             hashedPassword,
             user.id
         );
-
-        await new Promise((resolve, reject) => {
-            sessionStore.destroyUserSessions(user.id, (error) => {
-                if (error) {
-                    return reject(error);
-                }
-
-                resolve();
-            });
-        });
 
         return res.json({
             success: true,
