@@ -2659,6 +2659,8 @@ app.post("/api/reset-password", resetPasswordLimiter, async (req, res) => {
 // =========================
 
 app.post("/api/fund-wallet", requireAuth, async (req, res) => {
+    let reference = null;
+
     try {
         const { amount } = req.body;
 
@@ -2701,43 +2703,103 @@ app.post("/api/fund-wallet", requireAuth, async (req, res) => {
             });
         }
 
-        // Generate a unique reference
-        const reference =
+        // Generate the reference before creating the local transaction.
+        // This exact reference is also sent to Paystack.
+        reference =
             `CD-${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
+
+        // Record the funding attempt FIRST.
+        // The wallet is NOT credited here.
+        // Credit happens only after server-side verification/webhook validation.
+        db.prepare(`
+            INSERT INTO transactions (
+                user_id,
+                type,
+                amount,
+                status,
+                reference,
+                description
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+            user.id,
+            "wallet_funding",
+            fundingAmount,
+            "pending",
+            reference,
+            "Paystack wallet funding"
+        );
 
         // Paystack expects the amount in kobo
         const amountInKobo = fundingAmount * 100;
 
-        const paystackResponse = await fetch(
-            "https://api.paystack.co/transaction/initialize",
-            {
-                method: "POST",
+        let paystackResponse;
 
-                headers: {
-                    "Authorization":
-                        `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        try {
+            paystackResponse = await fetch(
+                "https://api.paystack.co/transaction/initialize",
+                {
+                    method: "POST",
 
-                    "Content-Type": "application/json"
-                },
+                    headers: {
+                        "Authorization":
+                            `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
 
-                body: JSON.stringify({
-                    email: user.email,
-                    amount: String(amountInKobo),
-                    currency: "NGN",
-                    reference: reference,
-                    callback_url:
-                        `${process.env.CHEAPDATA_PUBLIC_URL || `${req.protocol}://${req.get("host")}`}/fund-wallet.html`,
+                        "Content-Type": "application/json"
+                    },
 
-                    metadata: {
-                        user_id: String(user.id),
-                        purpose: "wallet_funding"
-                    }
-                })
-            }
-        );
+                    body: JSON.stringify({
+                        email: user.email,
+                        amount: String(amountInKobo),
+                        currency: "NGN",
+                        reference: reference,
 
-        const paystackData = await paystackResponse.json();
+                        callback_url:
+                            `${process.env.CHEAPDATA_PUBLIC_URL || `${req.protocol}://${req.get("host")}`}/fund-wallet.html`,
 
+                        metadata: {
+                            user_id: String(user.id),
+                            purpose: "wallet_funding"
+                        }
+                    })
+                }
+            );
+        } catch (error) {
+            // We cannot know whether Paystack received the request.
+            // Keep the transaction pending so it can be reconciled safely.
+            console.error(
+                "Paystack initialization network error:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Unable to confirm payment initialization right now. Please try again later."
+            });
+        }
+
+        let paystackData;
+
+        try {
+            paystackData = await paystackResponse.json();
+        } catch (error) {
+            // The payment request reached Paystack, but the response could
+            // not be interpreted. Keep the local transaction pending.
+            console.error(
+                "Invalid response from Paystack during initialization:",
+                error
+            );
+
+            return res.status(502).json({
+                success: false,
+                message:
+                    "Payment initialization could not be confirmed. Please try again later."
+            });
+        }
+
+        // Paystack explicitly rejected the initialization.
+        // Since we know the request was rejected, mark the local attempt failed.
         if (
             !paystackResponse.ok ||
             !paystackData.status ||
@@ -2748,6 +2810,23 @@ app.post("/api/fund-wallet", requireAuth, async (req, res) => {
                 paystackData
             );
 
+            db.prepare(`
+                UPDATE transactions
+                SET status = ?,
+                    description = ?
+                WHERE reference = ?
+                  AND user_id = ?
+                  AND type = ?
+                  AND status = ?
+            `).run(
+                "failed",
+                "Paystack wallet funding initialization failed",
+                reference,
+                user.id,
+                "wallet_funding",
+                "pending"
+            );
+
             return res.status(400).json({
                 success: false,
                 message:
@@ -2756,36 +2835,43 @@ app.post("/api/fund-wallet", requireAuth, async (req, res) => {
             });
         }
 
-        // Record the funding attempt before sending the customer to Paystack.
-        // The wallet is NOT credited here. Credit happens only after server-side
-        // verification in /api/fund-wallet/verify.
-        db.prepare(`
-            INSERT INTO transactions (
-                user_id, type, amount, status, reference, description
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-        `).run(
-            user.id,
-            "wallet_funding",
-            fundingAmount,
-            "pending",
-            paystackData.data.reference,
-            "Paystack wallet funding"
-        );
+        // Paystack should return the same reference we supplied.
+        // Reject an unexpected reference rather than creating an
+        // authorization flow that cannot be matched safely.
+        if (
+            !paystackData.data.reference ||
+            paystackData.data.reference !== reference
+        ) {
+            console.error(
+                "Paystack returned an unexpected transaction reference:",
+                {
+                    expected: reference,
+                    received: paystackData.data.reference
+                }
+            );
+
+            return res.status(502).json({
+                success: false,
+                message:
+                    "Payment initialization could not be verified. Please try again later."
+            });
+        }
 
         return res.json({
             success: true,
             message: "Payment initialized successfully.",
+
             authorization_url:
                 paystackData.data.authorization_url,
+
             access_code:
                 paystackData.data.access_code,
+
             reference:
-                paystackData.data.reference
+                reference
         });
 
     } catch (error) {
-
         console.error(
             "Fund wallet error:",
             error
