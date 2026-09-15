@@ -10,7 +10,73 @@ const { WEB_PUBLIC_DIR } = require("./config");
 const { db } = require("./db");
 const { requireAuth, requireAdmin } = require("./auth");
 
+// =========================
+// BREVO EMAIL
+// =========================
+
+async function sendBrevoEmail({ to, subject, htmlContent }) {
+    if (
+        !process.env.BREVO_API_KEY ||
+        !process.env.BREVO_FROM_EMAIL
+    ) {
+        throw new Error("Brevo email configuration is missing.");
+    }
+
+    const response = await axios.post(
+        "https://api.brevo.com/v3/smtp/email",
+        {
+            sender: {
+                name: process.env.BREVO_FROM_NAME || "CheapData",
+                email: process.env.BREVO_FROM_EMAIL
+            },
+            to: [
+                {
+                    email: to
+                }
+            ],
+            subject,
+            htmlContent
+        },
+        {
+            headers: {
+                "api-key": process.env.BREVO_API_KEY,
+                "Content-Type": "application/json",
+                Accept: "application/json"
+            },
+            timeout: 10000
+        }
+    );
+
+    return response.data;
+}
+
 const app = express();
+
+// =========================
+// PRODUCTION SECURITY CHECKS
+// =========================
+
+const sessionSecret = process.env.SESSION_SECRET;
+
+if (process.env.NODE_ENV === "production") {
+    if (!sessionSecret) {
+        console.error(
+            "SESSION_SECRET is required when NODE_ENV=production."
+        );
+        process.exit(1);
+    }
+
+    if (sessionSecret.length < 32) {
+        console.error(
+            "SESSION_SECRET must be at least 32 characters in production."
+        );
+        process.exit(1);
+    }
+} else if (!sessionSecret) {
+    console.warn(
+        "SESSION_SECRET is not set. Using an insecure development-only fallback."
+    );
+}
 
 // =========================
 // MIDDLEWARE
@@ -317,7 +383,7 @@ app.use(
         store: sessionStore,
 
         secret:
-            process.env.SESSION_SECRET ||
+            sessionSecret ||
             "dev-only-insecure-secret",
 
         resave: false,
@@ -334,6 +400,78 @@ app.use(
         }
     })
 );
+
+// =========================
+// CSRF / ORIGIN PROTECTION
+// =========================
+
+app.use((req, res, next) => {
+    const stateChangingMethods = [
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+    ];
+
+    if (
+        !req.path.startsWith("/api/") ||
+        !stateChangingMethods.includes(req.method)
+    ) {
+        return next();
+    }
+
+    // Paystack webhook is handled before this middleware.
+    if (req.path === "/api/paystack/webhook") {
+        return next();
+    }
+
+    const origin = req.get("Origin");
+
+    // If the browser provides an Origin header,
+    // it must match an allowed CheapData origin.
+    if (origin) {
+        const configuredPublicUrl =
+            process.env.CHEAPDATA_PUBLIC_URL;
+
+        const configuredOrigin = configuredPublicUrl
+            ? new URL(configuredPublicUrl).origin
+            : null;
+
+        const requestOrigin =
+            `${req.protocol}://${req.get("host")}`;
+
+        // Development may use localhost or the configured
+        // Codespaces/public origin.
+        // Production requires the configured public origin.
+        const allowedOrigins =
+            process.env.NODE_ENV === "production"
+                ? new Set(
+                    configuredOrigin
+                        ? [configuredOrigin]
+                        : [requestOrigin]
+                )
+                : new Set(
+                    [
+                        requestOrigin,
+                        configuredOrigin
+                    ].filter(Boolean)
+                );
+
+        if (!allowedOrigins.has(origin)) {
+            console.warn(
+                `Blocked cross-origin ${req.method} request to ${req.path} from ${origin}`
+            );
+
+            return res.status(403).json({
+                success: false,
+                message: "Cross-origin request blocked."
+            });
+        }
+    }
+
+    next();
+});
+
 app.use(express.static(WEB_PUBLIC_DIR));
 // =========================
 // SESSION CHECK
@@ -2476,7 +2614,7 @@ app.get("/api/admin/transactions", requireAuth, requireAdmin, (req, res) => {
 // FORGOT PASSWORD
 // =========================
 
-app.post("/api/forgot-password", forgotPasswordLimiter, (req, res) => {
+app.post("/api/forgot-password", forgotPasswordLimiter, async (req, res) => {
     try {
         const email = String(req.body.email || "").trim().toLowerCase();
 
@@ -2540,10 +2678,61 @@ if (process.env.NODE_ENV !== "production") {
     console.log("======================================");
     console.log("");
 } else {
-    console.log(
-        `Password reset requested for ${user.email}. ` +
-        "Reset token delivery is not configured."
-    );
+    try {
+        await sendBrevoEmail({
+            to: user.email,
+            subject: "CheapData Password Reset",
+            htmlContent: `
+                <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                    <h2>Reset your CheapData password</h2>
+
+                    <p>We received a request to reset your CheapData password.</p>
+
+                    <p>
+                        Click the button below to choose a new password:
+                    </p>
+
+                    <p>
+                        <a
+                            href="${resetUrl}"
+                            style="
+                                display:inline-block;
+                                padding:12px 20px;
+                                background:#2563eb;
+                                color:#ffffff;
+                                text-decoration:none;
+                                border-radius:6px;
+                            "
+                        >
+                            Reset Password
+                        </a>
+                    </p>
+
+                    <p>
+                        This link will expire in <strong>15 minutes</strong>.
+                    </p>
+
+                    <p>
+                        If you did not request a password reset, you can safely
+                        ignore this email.
+                    </p>
+
+                    <p>— CheapData</p>
+                </div>
+            `
+        });
+    } catch (emailError) {
+        console.error("Password reset email failed:", emailError.message);
+
+        db.prepare(`
+            UPDATE users
+            SET reset_token_hash = NULL,
+                reset_token_expires_at = NULL
+            WHERE id = ?
+        `).run(user.id);
+
+        throw new Error("Password reset email could not be sent.");
+    }
 }
 
         return res.json({
