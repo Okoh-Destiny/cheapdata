@@ -1355,7 +1355,8 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Please provide all purchase details including your Purchase PIN"
+                message:
+                    "Please provide all purchase details including your Purchase PIN"
             });
         }
 
@@ -1419,7 +1420,8 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
         if (!selectedPlan) {
             return res.status(400).json({
                 success: false,
-                message: "That data plan is not currently available"
+                message:
+                    "That data plan is not currently available"
             });
         }
 
@@ -1438,7 +1440,8 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
 
             return res.status(500).json({
                 success: false,
-                message: "This data plan is not properly configured. Please try another plan."
+                message:
+                    "This data plan is not properly configured. Please try another plan."
             });
         }
 
@@ -1456,7 +1459,7 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
         }
 
         // =========================
-        // FIND USER
+        // GET USER
         // =========================
 
         const user = db.prepare(`
@@ -1482,7 +1485,8 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
         if (!user.purchase_pin) {
             return res.status(400).json({
                 success: false,
-                message: "Please create a Purchase PIN before buying data"
+                message:
+                    "Please create a Purchase PIN before buying data"
             });
         }
 
@@ -1496,17 +1500,6 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
             return res.status(401).json({
                 success: false,
                 message: "Incorrect Purchase PIN"
-            });
-        }
-
-        // =========================
-        // CHECK WALLET
-        // =========================
-
-        if (Number(user.balance) < sellingPrice) {
-            return res.status(400).json({
-                success: false,
-                message: "Insufficient wallet balance"
             });
         }
 
@@ -1533,7 +1526,8 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
 
             return res.status(500).json({
                 success: false,
-                message: "Data service is temporarily unavailable"
+                message:
+                    "Data service is temporarily unavailable"
             });
         }
 
@@ -1545,19 +1539,102 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
             generateReference("DATA");
 
         // =========================
+        // RESERVE WALLET + CREATE
+        // PENDING TRANSACTION
+        // =========================
+        //
+        // IMPORTANT:
+        // The wallet is deducted BEFORE calling WiseSub.
+        //
+        // This prevents two simultaneous requests from
+        // spending the same wallet balance.
+        //
+        // The transaction remains "pending" until WiseSub
+        // confirms success or a confirmed provider failure
+        // allows us to refund it.
+        //
+
+        try {
+            const reserveTransaction =
+                db.transaction(() => {
+
+                    const debitResult =
+                        db.prepare(`
+                            UPDATE users
+                            SET balance = balance - ?
+                            WHERE id = ?
+                              AND balance >= ?
+                        `).run(
+                            sellingPrice,
+                            userId,
+                            sellingPrice
+                        );
+
+                    if (debitResult.changes !== 1) {
+                        throw new Error(
+                            "INSUFFICIENT_BALANCE"
+                        );
+                    }
+
+                    db.prepare(`
+                        INSERT INTO transactions (
+                            user_id,
+                            type,
+                            amount,
+                            status,
+                            reference,
+                            description
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    `).run(
+                        userId,
+                        "debit",
+                        sellingPrice,
+                        "pending",
+                        localReference,
+                        `${network} ${plan} data purchase for ${phone} | Pending WiseSub confirmation`
+                    );
+                });
+
+            reserveTransaction();
+
+        } catch (reserveError) {
+
+            if (
+                reserveError.message ===
+                "INSUFFICIENT_BALANCE"
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Insufficient wallet balance"
+                });
+            }
+
+            console.error(
+                "Could not reserve wallet for data purchase:",
+                reserveError
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Could not start the data purchase. Please try again."
+            });
+        }
+
+        // =========================
         // CALL WISESUB
         // =========================
 
-        let wiseSubResponse;
-
-        // In WiseSub test/sandbox mode, use WiseSub's official
-        // sandbox recipient. In live mode, use the customer's phone.
         const providerRecipient =
             environment === "test"
                 ? "08011111111"
                 : phone;
 
+        let wiseSubResponse;
+
         try {
+
             wiseSubResponse =
                 await axios.post(
                     `${baseUrl}/purchase`,
@@ -1598,10 +1675,11 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
         } catch (providerError) {
 
             console.error(
-                "WiseSub purchase failed."
+                "WiseSub data purchase request failed."
             );
 
             if (providerError.response) {
+
                 console.error(
                     "WiseSub status:",
                     providerError.response.status
@@ -1615,16 +1693,139 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
                         2
                     )
                 );
-            } else {
-                console.error(
-                    "WiseSub error:",
-                    providerError.message
-                );
+
+                // =========================
+                // CONFIRMED CLIENT-SIDE
+                // PROVIDER FAILURE
+                // =========================
+                //
+                // A 4xx response means WiseSub rejected
+                // the request before completing it.
+                //
+                // Safe to refund the reserved amount.
+                //
+
+                if (
+                    providerError.response.status >= 400 &&
+                    providerError.response.status < 500
+                ) {
+
+                    try {
+
+                        const refundTransaction =
+                            db.transaction(() => {
+
+                                const refundResult =
+                                    db.prepare(`
+                                        UPDATE users
+                                        SET balance = balance + ?
+                                        WHERE id = ?
+                                    `).run(
+                                        sellingPrice,
+                                        userId
+                                    );
+
+                                if (
+                                    refundResult.changes !== 1
+                                ) {
+                                    throw new Error(
+                                        "Wallet refund failed"
+                                    );
+                                }
+
+                                const updateResult =
+                                    db.prepare(`
+                                        UPDATE transactions
+                                        SET
+                                            status = ?,
+                                            description = ?
+                                        WHERE reference = ?
+                                          AND user_id = ?
+                                          AND status = 'pending'
+                                    `).run(
+                                        "failed",
+                                        `${network} ${plan} data purchase for ${phone} | WiseSub rejected the purchase`,
+                                        localReference,
+                                        userId
+                                    );
+
+                                if (
+                                    updateResult.changes !== 1
+                                ) {
+                                    throw new Error(
+                                        "Transaction status update failed"
+                                    );
+                                }
+                            });
+
+                        refundTransaction();
+
+                    } catch (refundError) {
+
+                        console.error(
+                            "CRITICAL: WiseSub rejected data purchase but wallet refund failed.",
+                            refundError
+                        );
+
+                        return res.status(500).json({
+                            success: false,
+                            message:
+                                "The data provider rejected the purchase, but we could not complete the wallet refund automatically. Please contact support.",
+                            reference:
+                                localReference
+                        });
+                    }
+
+                    return res.status(502).json({
+                        success: false,
+                        message:
+                            "Data purchase was rejected by the provider. Your wallet has been refunded.",
+                        reference:
+                            localReference
+                    });
+                }
+
+                // =========================
+                // 5xx = AMBIGUOUS
+                // =========================
+                //
+                // DO NOT refund automatically.
+                //
+                // WiseSub may have processed the purchase even
+                // though CheapData received a server error.
+                //
+
+                return res.status(202).json({
+                    success: false,
+                    pending: true,
+                    message:
+                        "Your data purchase is being verified with the provider. Please do not retry this purchase.",
+                    reference:
+                        localReference
+                });
             }
 
-            return res.status(502).json({
+            // =========================
+            // NETWORK / TIMEOUT ERROR
+            // =========================
+            //
+            // We cannot know whether WiseSub processed the
+            // purchase. Therefore the wallet remains reserved
+            // and the transaction remains pending.
+            //
+
+            console.error(
+                "WiseSub data request error:",
+                providerError.message
+            );
+
+            return res.status(202).json({
                 success: false,
-                message: "Data provider could not process the purchase. Your wallet was not charged."
+                pending: true,
+                message:
+                    "We could not immediately confirm your data purchase. Please do not retry this purchase.",
+                reference:
+                    localReference
             });
         }
 
@@ -1639,8 +1840,9 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
             !providerData ||
             providerData.success !== true
         ) {
+
             console.error(
-                "WiseSub returned an unsuccessful response:",
+                "WiseSub returned an unsuccessful data response:",
                 JSON.stringify(
                     providerData,
                     null,
@@ -1648,9 +1850,84 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
                 )
             );
 
+            // WiseSub explicitly returned a normal API response
+            // saying the purchase was unsuccessful.
+            //
+            // Refund the wallet because this is not an ambiguous
+            // network/server failure.
+
+            try {
+
+                const refundTransaction =
+                    db.transaction(() => {
+
+                        const refundResult =
+                            db.prepare(`
+                                UPDATE users
+                                SET balance = balance + ?
+                                WHERE id = ?
+                            `).run(
+                                sellingPrice,
+                                userId
+                            );
+
+                        if (
+                            refundResult.changes !== 1
+                        ) {
+                            throw new Error(
+                                "Wallet refund failed"
+                            );
+                        }
+
+                        const updateResult =
+                            db.prepare(`
+                                UPDATE transactions
+                                SET
+                                    status = ?,
+                                    description = ?
+                                WHERE reference = ?
+                                  AND user_id = ?
+                                  AND status = 'pending'
+                            `).run(
+                                "failed",
+                                `${network} ${plan} data purchase for ${phone} | WiseSub did not complete the purchase`,
+                                localReference,
+                                userId
+                            );
+
+                        if (
+                            updateResult.changes !== 1
+                        ) {
+                            throw new Error(
+                                "Transaction status update failed"
+                            );
+                        }
+                    });
+
+                refundTransaction();
+
+            } catch (refundError) {
+
+                console.error(
+                    "CRITICAL: WiseSub data purchase failed but wallet refund failed.",
+                    refundError
+                );
+
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "The data purchase failed, but we could not complete the wallet refund automatically. Please contact support.",
+                    reference:
+                        localReference
+                });
+            }
+
             return res.status(502).json({
                 success: false,
-                message: "Data purchase was not completed. Your wallet was not charged."
+                message:
+                    "Data purchase was not completed. Your wallet has been refunded.",
+                reference:
+                    localReference
             });
         }
 
@@ -1662,80 +1939,85 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
             providerData.data?.reference || null;
 
         // =========================
-        // DEBIT WALLET + RECORD
+        // SUCCESS MUST HAVE
+        // PROVIDER REFERENCE
+        // =========================
+        //
+        // The reference is required for future reconciliation.
+        //
+
+        if (!wiseSubReference) {
+
+            console.error(
+                "CRITICAL: WiseSub reported success but returned no reference.",
+                JSON.stringify(
+                    providerData,
+                    null,
+                    2
+                )
+            );
+
+            return res.status(202).json({
+                success: false,
+                pending: true,
+                message:
+                    "Your data purchase was accepted by the provider but could not yet be fully confirmed. Please do not retry this purchase.",
+                reference:
+                    localReference
+            });
+        }
+
+        // =========================
+        // MARK TRANSACTION SUCCESSFUL
         // =========================
 
         try {
-            const transaction =
+
+            const completeTransaction =
                 db.transaction(() => {
 
-                    const debitResult =
+                    const updateResult =
                         db.prepare(`
-                            UPDATE users
-                            SET balance = balance - ?
-                            WHERE id = ?
-                              AND balance >= ?
+                            UPDATE transactions
+                            SET
+                                status = ?,
+                                description = ?
+                            WHERE reference = ?
+                              AND user_id = ?
+                              AND status = 'pending'
                         `).run(
-                            sellingPrice,
-                            userId,
-                            sellingPrice
+                            "successful",
+                            `${network} ${plan} data purchase for ${phone} | WiseSub reference: ${wiseSubReference}`,
+                            localReference,
+                            userId
                         );
 
-                    if (debitResult.changes !== 1) {
+                    if (
+                        updateResult.changes !== 1
+                    ) {
                         throw new Error(
-                            "Wallet balance changed. Please contact support."
+                            "Pending transaction could not be completed"
                         );
                     }
-
-                    db.prepare(`
-                        INSERT INTO transactions (
-                            user_id,
-                            type,
-                            amount,
-                            status,
-                            reference,
-                            description
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    `).run(
-                        userId,
-                        "debit",
-                        sellingPrice,
-                        "successful",
-                        localReference,
-                        `${network} ${plan} data purchase for ${phone}` +
-                        (
-                            wiseSubReference
-                                ? ` | WiseSub reference: ${wiseSubReference}`
-                                : ""
-                        )
-                    );
                 });
 
-            transaction();
+            completeTransaction();
 
-        } catch (walletError) {
+        } catch (completionError) {
 
             console.error(
-                "CRITICAL: WiseSub purchase succeeded but CheapData wallet debit failed.",
-                walletError
+                "CRITICAL: WiseSub data purchase succeeded but CheapData could not mark the transaction successful.",
+                completionError
             );
-
-            /*
-             * The provider has already completed the purchase.
-             * We intentionally do NOT tell the customer that the
-             * purchase failed, because doing so could cause a retry
-             * and create a duplicate provider purchase.
-             *
-             * This situation should be reviewed by the admin/support
-             * system in a production implementation.
-             */
 
             return res.status(500).json({
                 success: false,
-                message: "Your data purchase was processed by the provider, but we could not update your wallet automatically. Please contact support before trying again.",
-                reference: localReference,
-                providerReference: wiseSubReference
+                message:
+                    "Your data purchase was processed by the provider, but we could not complete the transaction record automatically. Please contact support before trying again.",
+                reference:
+                    localReference,
+                providerReference:
+                    wiseSubReference
             });
         }
 
@@ -1754,7 +2036,7 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
         // SUCCESS
         // =========================
 
-        res.json({
+        return res.json({
             success: true,
             message: "Data purchase successful",
 
@@ -1762,7 +2044,8 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
             plan,
             phone,
 
-            amount: sellingPrice,
+            amount:
+                sellingPrice,
 
             balance:
                 updatedUser.balance,
@@ -1781,12 +2064,14 @@ app.post("/api/purchase-data", requireAuth, async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: "Data purchase failed"
+            message:
+                "Data purchase failed"
         });
     }
 });
+
 
 // =========================
 // PURCHASE AIRTIME
@@ -1803,7 +2088,8 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
             pin
         } = req.body;
 
-        const airtimeAmount = Number(amount);
+        const airtimeAmount =
+            Number(amount);
 
         // =========================
         // VALIDATION
@@ -1822,7 +2108,8 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
             });
         }
 
-        const pinString = String(pin);
+        const pinString =
+            String(pin);
 
         if (!/^\d{4}$/.test(pinString)) {
             return res.status(400).json({
@@ -1842,7 +2129,8 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         if (!allowedNetworks.includes(network)) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid network"
+                message:
+                    "Invalid network"
             });
         }
 
@@ -1883,7 +2171,8 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         if (!user) {
             return res.status(404).json({
                 success: false,
-                message: "User not found"
+                message:
+                    "User not found"
             });
         }
 
@@ -1896,29 +2185,20 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         }
 
         // =========================
-        // CHECK PURCHASE PIN
+        // VERIFY PURCHASE PIN
         // =========================
 
-        const pinCorrect = await bcrypt.compare(
-            pinString,
-            user.purchase_pin
-        );
+        const pinCorrect =
+            await bcrypt.compare(
+                pinString,
+                user.purchase_pin
+            );
 
         if (!pinCorrect) {
             return res.status(401).json({
                 success: false,
-                message: "Incorrect Purchase PIN"
-            });
-        }
-
-        // =========================
-        // CHECK WALLET
-        // =========================
-
-        if (Number(user.balance) < airtimeAmount) {
-            return res.status(400).json({
-                success: false,
-                message: "Insufficient wallet balance"
+                message:
+                    "Incorrect Purchase PIN"
             });
         }
 
@@ -1973,13 +2253,92 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         }
 
         // =========================
+        // GENERATE LOCAL REFERENCE
+        // =========================
+
+        const localReference =
+            generateReference("AIRTIME");
+
+        // =========================
+        // RESERVE WALLET + CREATE
+        // PENDING TRANSACTION
+        // =========================
+
+        try {
+
+            const reserveTransaction =
+                db.transaction(() => {
+
+                    const debitResult =
+                        db.prepare(`
+                            UPDATE users
+                            SET balance = balance - ?
+                            WHERE id = ?
+                              AND balance >= ?
+                        `).run(
+                            airtimeAmount,
+                            userId,
+                            airtimeAmount
+                        );
+
+                    if (
+                        debitResult.changes !== 1
+                    ) {
+                        throw new Error(
+                            "INSUFFICIENT_BALANCE"
+                        );
+                    }
+
+                    db.prepare(`
+                        INSERT INTO transactions (
+                            user_id,
+                            type,
+                            amount,
+                            status,
+                            reference,
+                            description
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    `).run(
+                        userId,
+                        "debit",
+                        airtimeAmount,
+                        "pending",
+                        localReference,
+                        `${network} airtime purchase for ${phone} | Pending WiseSub confirmation`
+                    );
+                });
+
+            reserveTransaction();
+
+        } catch (reserveError) {
+
+            if (
+                reserveError.message ===
+                "INSUFFICIENT_BALANCE"
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Insufficient wallet balance"
+                });
+            }
+
+            console.error(
+                "Could not reserve wallet for airtime purchase:",
+                reserveError
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Could not start the airtime purchase. Please try again."
+            });
+        }
+
+        // =========================
         // TEST/SANDBOX RECIPIENT
         // =========================
-        //
-        // WiseSub's sandbox uses its official
-        // test recipient. Live mode uses the
-        // customer's actual phone number.
-        //
 
         const providerRecipient =
             environment === "test"
@@ -1990,12 +2349,10 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         // CALL WISESUB
         // =========================
 
-        const localReference =
-            generateReference("AIRTIME");
-
         let wiseSubResponse;
 
         try {
+
             wiseSubResponse =
                 await axios.post(
                     `${baseUrl}/purchase`,
@@ -2036,10 +2393,11 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
         } catch (providerError) {
 
             console.error(
-                "WiseSub airtime purchase failed."
+                "WiseSub airtime purchase request failed."
             );
 
             if (providerError.response) {
+
                 console.error(
                     "WiseSub status:",
                     providerError.response.status
@@ -2053,17 +2411,121 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
                         2
                     )
                 );
-            } else {
-                console.error(
-                    "WiseSub error:",
-                    providerError.message
-                );
+
+                // =========================
+                // CONFIRMED 4xx FAILURE
+                // =========================
+
+                if (
+                    providerError.response.status >= 400 &&
+                    providerError.response.status < 500
+                ) {
+
+                    try {
+
+                        const refundTransaction =
+                            db.transaction(() => {
+
+                                const refundResult =
+                                    db.prepare(`
+                                        UPDATE users
+                                        SET balance = balance + ?
+                                        WHERE id = ?
+                                    `).run(
+                                        airtimeAmount,
+                                        userId
+                                    );
+
+                                if (
+                                    refundResult.changes !== 1
+                                ) {
+                                    throw new Error(
+                                        "Wallet refund failed"
+                                    );
+                                }
+
+                                const updateResult =
+                                    db.prepare(`
+                                        UPDATE transactions
+                                        SET
+                                            status = ?,
+                                            description = ?
+                                        WHERE reference = ?
+                                          AND user_id = ?
+                                          AND status = 'pending'
+                                    `).run(
+                                        "failed",
+                                        `${network} airtime purchase for ${phone} | WiseSub rejected the purchase`,
+                                        localReference,
+                                        userId
+                                    );
+
+                                if (
+                                    updateResult.changes !== 1
+                                ) {
+                                    throw new Error(
+                                        "Transaction status update failed"
+                                    );
+                                }
+                            });
+
+                        refundTransaction();
+
+                    } catch (refundError) {
+
+                        console.error(
+                            "CRITICAL: WiseSub rejected airtime purchase but wallet refund failed.",
+                            refundError
+                        );
+
+                        return res.status(500).json({
+                            success: false,
+                            message:
+                                "The airtime provider rejected the purchase, but we could not complete the wallet refund automatically. Please contact support.",
+                            reference:
+                                localReference
+                        });
+                    }
+
+                    return res.status(502).json({
+                        success: false,
+                        message:
+                            "Airtime purchase was rejected by the provider. Your wallet has been refunded.",
+                        reference:
+                            localReference
+                    });
+                }
+
+                // =========================
+                // 5xx = AMBIGUOUS
+                // =========================
+
+                return res.status(202).json({
+                    success: false,
+                    pending: true,
+                    message:
+                        "Your airtime purchase is being verified with the provider. Please do not retry this purchase.",
+                    reference:
+                        localReference
+                });
             }
 
-            return res.status(502).json({
+            // =========================
+            // NETWORK / TIMEOUT ERROR
+            // =========================
+
+            console.error(
+                "WiseSub airtime request error:",
+                providerError.message
+            );
+
+            return res.status(202).json({
                 success: false,
+                pending: true,
                 message:
-                    "Airtime provider could not process the purchase. Your wallet was not charged."
+                    "We could not immediately confirm your airtime purchase. Please do not retry this purchase.",
+                reference:
+                    localReference
             });
         }
 
@@ -2078,6 +2540,7 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
             !providerData ||
             providerData.success !== true
         ) {
+
             console.error(
                 "WiseSub returned an unsuccessful airtime response:",
                 JSON.stringify(
@@ -2087,82 +2550,165 @@ app.post("/api/purchase-airtime", requireAuth, async (req, res) => {
                 )
             );
 
+            // =========================
+            // REFUND CONFIRMED FAILURE
+            // =========================
+
+            try {
+
+                const refundTransaction =
+                    db.transaction(() => {
+
+                        const refundResult =
+                            db.prepare(`
+                                UPDATE users
+                                SET balance = balance + ?
+                                WHERE id = ?
+                            `).run(
+                                airtimeAmount,
+                                userId
+                            );
+
+                        if (
+                            refundResult.changes !== 1
+                        ) {
+                            throw new Error(
+                                "Wallet refund failed"
+                            );
+                        }
+
+                        const updateResult =
+                            db.prepare(`
+                                UPDATE transactions
+                                SET
+                                    status = ?,
+                                    description = ?
+                                WHERE reference = ?
+                                  AND user_id = ?
+                                  AND status = 'pending'
+                            `).run(
+                                "failed",
+                                `${network} airtime purchase for ${phone} | WiseSub did not complete the purchase`,
+                                localReference,
+                                userId
+                            );
+
+                        if (
+                            updateResult.changes !== 1
+                        ) {
+                            throw new Error(
+                                "Transaction status update failed"
+                            );
+                        }
+                    });
+
+                refundTransaction();
+
+            } catch (refundError) {
+
+                console.error(
+                    "CRITICAL: WiseSub airtime purchase failed but wallet refund failed.",
+                    refundError
+                );
+
+                return res.status(500).json({
+                    success: false,
+                    message:
+                        "The airtime purchase failed, but we could not complete the wallet refund automatically. Please contact support.",
+                    reference:
+                        localReference
+                });
+            }
+
             return res.status(502).json({
                 success: false,
                 message:
-                    "Airtime purchase was not completed. Your wallet was not charged."
+                    "Airtime purchase was not completed. Your wallet has been refunded.",
+                reference:
+                    localReference
             });
         }
+
+        // =========================
+        // GET WISESUB REFERENCE
+        // =========================
 
         const wiseSubReference =
             providerData.data?.reference || null;
 
         // =========================
-        // DEBIT WALLET + RECORD
+        // SUCCESS MUST HAVE
+        // PROVIDER REFERENCE
+        // =========================
+
+        if (!wiseSubReference) {
+
+            console.error(
+                "CRITICAL: WiseSub reported airtime success but returned no reference.",
+                JSON.stringify(
+                    providerData,
+                    null,
+                    2
+                )
+            );
+
+            return res.status(202).json({
+                success: false,
+                pending: true,
+                message:
+                    "Your airtime purchase was accepted by the provider but could not yet be fully confirmed. Please do not retry this purchase.",
+                reference:
+                    localReference
+            });
+        }
+
+        // =========================
+        // MARK TRANSACTION SUCCESSFUL
         // =========================
 
         try {
-            const transaction =
+
+            const completeTransaction =
                 db.transaction(() => {
 
-                    const debitResult =
+                    const updateResult =
                         db.prepare(`
-                            UPDATE users
-                            SET balance = balance - ?
-                            WHERE id = ?
-                              AND balance >= ?
+                            UPDATE transactions
+                            SET
+                                status = ?,
+                                description = ?
+                            WHERE reference = ?
+                              AND user_id = ?
+                              AND status = 'pending'
                         `).run(
-                            airtimeAmount,
-                            userId,
-                            airtimeAmount
+                            "successful",
+                            `${network} airtime purchase for ${phone} | WiseSub reference: ${wiseSubReference}`,
+                            localReference,
+                            userId
                         );
 
                     if (
-                        debitResult.changes !== 1
+                        updateResult.changes !== 1
                     ) {
                         throw new Error(
-                            "Wallet balance changed. Please contact support."
+                            "Pending transaction could not be completed"
                         );
                     }
-
-                    db.prepare(`
-                        INSERT INTO transactions (
-                            user_id,
-                            type,
-                            amount,
-                            status,
-                            reference,
-                            description
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    `).run(
-                        userId,
-                        "debit",
-                        airtimeAmount,
-                        "successful",
-                        localReference,
-                        `${network} airtime purchase for ${phone}` +
-                        (
-                            wiseSubReference
-                                ? ` | WiseSub reference: ${wiseSubReference}`
-                                : ""
-                        )
-                    );
                 });
 
-            transaction();
+            completeTransaction();
 
-        } catch (walletError) {
+        } catch (completionError) {
 
             console.error(
-                "CRITICAL: WiseSub airtime purchase succeeded but CheapData wallet debit failed.",
-                walletError
+                "CRITICAL: WiseSub airtime purchase succeeded but CheapData could not mark the transaction successful.",
+                completionError
             );
 
             return res.status(500).json({
                 success: false,
                 message:
-                    "Your airtime purchase was processed by the provider, but we could not update your wallet automatically. Please contact support before trying again.",
+                    "Your airtime purchase was processed by the provider, but we could not complete the transaction record automatically. Please contact support before trying again.",
                 reference:
                     localReference,
                 providerReference:
